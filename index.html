@@ -1,9 +1,28 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Registro Elettronico — Baytul Aman Monza</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
-.app{background:#0a0a0a;min-height:100vh;padding:1.25rem;color:#e8e6e0;font-family:var(--font-sans);}
+body{background:#0a0a0a;color:#e8e6e0;font-family:system-ui,-apple-system,sans-serif;}
+.app{padding:1.25rem;}
 .mosque-name{font-size:11px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;color:#888;margin-bottom:4px;}
 .registro-title{font-size:20px;font-weight:500;color:#e8e6e0;margin-bottom:10px;}
 .gruppo-select{font-size:13px;padding:7px 12px;border-radius:8px;border:.5px solid #333;background:#1a1a1a;color:#e8e6e0;height:34px;cursor:pointer;}
+
+/* SYNC BAR */
+.sync-bar{display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap;}
+.sync-status{font-size:12px;color:#555;display:flex;align-items:center;gap:6px;}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:#333;flex-shrink:0;}
+.sync-dot.ok{background:#5DCAA5;}
+.sync-dot.error{background:#f09595;}
+.sync-dot.loading{background:#EF9F27;animation:pulse 1s infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+.btn-config{font-size:11px;padding:4px 10px;border:.5px solid #333;border-radius:6px;background:none;color:#666;cursor:pointer;}
+.btn-config:hover{color:#aaa;border-color:#555;}
+
 .tabs{display:flex;gap:4px;border-bottom:.5px solid #222;margin-bottom:1.5rem;margin-top:1.25rem;}
 .tab{padding:8px 16px;font-size:13px;color:#777;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-.5px;background:none;border-top:none;border-left:none;border-right:none;}
 .tab.active{color:#e8e6e0;border-bottom-color:#e8e6e0;}
@@ -19,29 +38,25 @@ input[type=date]{font-size:13px;padding:6px 10px;border-radius:8px;border:.5px s
 .btn.primary:hover{background:#ccc;}
 .btn.danger{color:#f09595;border-color:#3a2020;}
 .btn.danger:hover{background:#1f1212;}
+.btn:disabled{opacity:.4;cursor:not-allowed;}
 .table-wrap{overflow-x:auto;}
 table{width:100%;border-collapse:collapse;font-size:13px;}
 th{text-align:left;padding:8px 10px;font-weight:500;font-size:11px;color:#666;border-bottom:.5px solid #222;white-space:nowrap;letter-spacing:.05em;text-transform:uppercase;}
 td{padding:8px 10px;border-bottom:.5px solid #1a1a1a;color:#d0cec8;vertical-align:middle;}
 tr:hover td{background:#111;}
-th.festa{color:#444!important;}
-th.sab{color:#7a6a4a;}
-th.dom{color:#5a7a5a;}
-th.lun{color:#4a6a7a;}
-th.mar{color:#6a4a7a;}
 .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:1.5rem;}
 .stat-card{background:#111;border:.5px solid #222;border-radius:8px;padding:.9rem 1rem;}
 .stat-label{font-size:11px;color:#666;margin-bottom:4px;letter-spacing:.04em;}
 .stat-val{font-size:22px;font-weight:500;color:#e8e6e0;}
 .stat-sub{font-size:11px;color:#555;margin-top:2px;}
-.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;align-items:center;justify-content:center;}
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:100;align-items:center;justify-content:center;}
 .modal-bg.open{display:flex;}
-.modal{background:#141414;border:.5px solid #333;border-radius:12px;padding:1.25rem;width:340px;max-width:95vw;}
+.modal{background:#141414;border:.5px solid #333;border-radius:12px;padding:1.25rem;width:360px;max-width:95vw;max-height:90vh;overflow-y:auto;}
 .modal h3{font-size:15px;font-weight:500;margin-bottom:1rem;color:#e8e6e0;}
 .modal label{font-size:12px;color:#777;display:block;margin-bottom:3px;margin-top:10px;}
 .modal input,.modal select,.modal textarea{width:100%;font-size:13px;padding:7px 10px;border:.5px solid #333;border-radius:8px;background:#1e1e1e;color:#e8e6e0;resize:vertical;}
 .modal input::placeholder,.modal textarea::placeholder{color:#555;}
-.modal textarea{min-height:70px;}
+.modal textarea{min-height:60px;}
 .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:1rem;}
 .empty{text-align:center;padding:2rem;color:#555;font-size:13px;}
 .progress-bar{height:5px;border-radius:3px;background:#222;overflow:hidden;min-width:80px;}
@@ -50,16 +65,29 @@ select option{background:#1a1a1a;color:#e8e6e0;}
 .day-label{display:flex;flex-direction:column;align-items:center;gap:2px;}
 .day-label .dd{font-size:12px;color:#aaa;}
 .day-label .dw{font-size:9px;letter-spacing:.06em;margin-top:1px;}
-.festivo-badge{font-size:9px;color:#555;font-style:italic;}
+.info-box{background:#111;border:.5px solid #2a2a1a;border-radius:8px;padding:1rem;font-size:12px;color:#888;line-height:1.7;margin-bottom:1rem;}
+.info-box code{background:#1e1e1e;padding:2px 6px;border-radius:4px;color:#EF9F27;font-size:11px;}
 </style>
-
+</head>
+<body>
 <div class="app">
+
 <div class="mosque-name">Baytul Aman Monza</div>
-<div class="registro-title">Registro di classe</div>
+<div class="registro-title">Registro Elettronico</div>
+
 <select class="gruppo-select" id="sel-gruppo" onchange="cambiaGruppo()">
   <option value="A">Gruppo A</option>
   <option value="B">Gruppo B</option>
 </select>
+
+<div class="sync-bar">
+  <div class="sync-status">
+    <div class="sync-dot" id="sync-dot"></div>
+    <span id="sync-label">Non configurato</span>
+  </div>
+  <button class="btn-config" onclick="openModal('modal-config')">⚙ Configura Google Sheets</button>
+  <button class="btn-config" id="btn-sync" onclick="syncNow()" style="display:none">↑ Salva su Sheets</button>
+</div>
 
 <div class="tabs">
   <button class="tab active" onclick="switchTab('presenze')">Presenze</button>
@@ -71,16 +99,14 @@ select option{background:#1a1a1a;color:#e8e6e0;}
 <!-- PRESENZE -->
 <div id="tab-presenze" class="section active">
   <div class="top-bar">
-    <select id="sel-anno" onchange="renderPresenze()">
-      <option value="2025">2025/26</option>
-      <option value="2026" selected>2026/27</option>
-    </select>
+    <select id="sel-anno" onchange="renderPresenze()"></select>
     <select id="sel-mese" onchange="renderPresenze()">
+      <option value="0">Gennaio</option><option value="1">Febbraio</option>
+      <option value="2">Marzo</option><option value="3">Aprile</option>
+      <option value="4">Maggio</option><option value="5">Giugno</option>
+      <option value="6">Luglio</option><option value="7">Agosto</option>
       <option value="8">Settembre</option><option value="9">Ottobre</option>
       <option value="10">Novembre</option><option value="11">Dicembre</option>
-      <option value="0">Gennaio</option><option value="1">Febbraio</option>
-      <option value="2">Marzo</option><option value="3" selected>Aprile</option>
-      <option value="4">Maggio</option><option value="5">Giugno</option>
     </select>
     <button class="btn" onclick="openModalStudente()">+ Studente</button>
   </div>
@@ -92,15 +118,14 @@ select option{background:#1a1a1a;color:#e8e6e0;}
 <!-- ARGOMENTI -->
 <div id="tab-argomenti" class="section">
   <div class="top-bar">
-    <select id="sel-anno-arg" onchange="renderArgomenti()">
-      <option value="2025">2025/26</option><option value="2026" selected>2026/27</option>
-    </select>
+    <select id="sel-anno-arg" onchange="renderArgomenti()"></select>
     <select id="sel-mese-arg" onchange="renderArgomenti()">
+      <option value="0">Gennaio</option><option value="1">Febbraio</option>
+      <option value="2">Marzo</option><option value="3">Aprile</option>
+      <option value="4">Maggio</option><option value="5">Giugno</option>
+      <option value="6">Luglio</option><option value="7">Agosto</option>
       <option value="8">Settembre</option><option value="9">Ottobre</option>
       <option value="10">Novembre</option><option value="11">Dicembre</option>
-      <option value="0">Gennaio</option><option value="1">Febbraio</option>
-      <option value="2">Marzo</option><option value="3" selected>Aprile</option>
-      <option value="4">Maggio</option><option value="5">Giugno</option>
     </select>
     <button class="btn" onclick="openModalArgomento()">+ Argomento</button>
   </div>
@@ -125,15 +150,14 @@ select option{background:#1a1a1a;color:#e8e6e0;}
 <!-- RIEPILOGO -->
 <div id="tab-riepilogo" class="section">
   <div class="top-bar">
-    <select id="sel-anno-ris" onchange="renderRiepilogo()">
-      <option value="2025">2025/26</option><option value="2026" selected>2026/27</option>
-    </select>
+    <select id="sel-anno-ris" onchange="renderRiepilogo()"></select>
     <select id="sel-mese-ris" onchange="renderRiepilogo()">
+      <option value="0">Gennaio</option><option value="1">Febbraio</option>
+      <option value="2">Marzo</option><option value="3">Aprile</option>
+      <option value="4">Maggio</option><option value="5">Giugno</option>
+      <option value="6">Luglio</option><option value="7">Agosto</option>
       <option value="8">Settembre</option><option value="9">Ottobre</option>
       <option value="10">Novembre</option><option value="11">Dicembre</option>
-      <option value="0">Gennaio</option><option value="1">Febbraio</option>
-      <option value="2">Marzo</option><option value="3" selected>Aprile</option>
-      <option value="4">Maggio</option><option value="5">Giugno</option>
     </select>
   </div>
   <div id="stats-generali" class="stats-grid"></div>
@@ -143,7 +167,25 @@ select option{background:#1a1a1a;color:#e8e6e0;}
   </div>
 </div>
 
-<!-- MODALS -->
+<!-- MODAL CONFIG GOOGLE SHEETS -->
+<div class="modal-bg" id="modal-config">
+  <div class="modal">
+    <h3>Configura Google Sheets</h3>
+    <div class="info-box">
+      Incolla qui l'URL del tuo <strong>Google Apps Script</strong> pubblicato come Web App.<br>
+      Lo trovi in Apps Script → <code>Distribuisci → Nuova distribuzione → App web</code><br>
+      Accesso: <code>Chiunque</code>
+    </div>
+    <label>URL Google Apps Script</label>
+    <input type="text" id="m-script-url" placeholder="https://script.google.com/macros/s/.../exec">
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modal-config')">Annulla</button>
+      <button class="btn primary" onclick="salvaConfig()">Salva e connetti</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL STUDENTE -->
 <div class="modal-bg" id="modal-studente">
   <div class="modal">
     <h3>Nuovo studente</h3>
@@ -156,6 +198,7 @@ select option{background:#1a1a1a;color:#e8e6e0;}
   </div>
 </div>
 
+<!-- MODAL ARGOMENTO -->
 <div class="modal-bg" id="modal-argomento">
   <div class="modal">
     <h3>Aggiungi argomento</h3>
@@ -172,6 +215,7 @@ select option{background:#1a1a1a;color:#e8e6e0;}
   </div>
 </div>
 
+<!-- MODAL VOTO -->
 <div class="modal-bg" id="modal-voto">
   <div class="modal">
     <h3>Registra voto</h3>
@@ -193,34 +237,112 @@ select option{background:#1a1a1a;color:#e8e6e0;}
 </div>
 
 <script>
-const GIORNI_LEZIONE = [6, 0, 1, 2]; // sab=6, dom=0, lun=1, mar=2
+// ─── COSTANTI ────────────────────────────────────────────
+const GIORNI_LEZIONE = [6, 0, 1, 2]; // sab, dom, lun, mar
 const NOMI_GG = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
 const COLORI_GG = {6:'#7a6a4a', 0:'#5a7a5a', 1:'#4a6a7a', 2:'#6a4a7a'};
 const MESI_NOMI = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
 
-const db = { A:{studenti:[],presenze:{},argomenti:[],voti:[]}, B:{studenti:[],presenze:{},argomenti:[],voti:[]} };
+// ─── DATABASE LOCALE ─────────────────────────────────────
+const db = {
+  A: { studenti:[], presenze:{}, argomenti:[], voti:[] },
+  B: { studenti:[], presenze:{}, argomenti:[], voti:[] }
+};
 let gruppoCorrente = 'A';
 function G(){ return db[gruppoCorrente]; }
 
-// Genera tutte le date sab/dom/lun/mar di un dato mese/anno
+// ─── GOOGLE SHEETS CONFIG ────────────────────────────────
+let SCRIPT_URL = localStorage.getItem('baytul_script_url') || '';
+let syncPending = false;
+let syncTimer = null;
+
+function setSyncStatus(stato, msg) {
+  const dot = document.getElementById('sync-dot');
+  const label = document.getElementById('sync-label');
+  const btnSync = document.getElementById('btn-sync');
+  dot.className = 'sync-dot ' + stato;
+  label.textContent = msg;
+  if (SCRIPT_URL) btnSync.style.display = 'inline-block';
+}
+
+function salvaConfig() {
+  const url = document.getElementById('m-script-url').value.trim();
+  if (!url.startsWith('https://script.google.com')) {
+    alert('URL non valido. Deve iniziare con https://script.google.com');
+    return;
+  }
+  SCRIPT_URL = url;
+  localStorage.setItem('baytul_script_url', url);
+  closeModal('modal-config');
+  loadFromSheets(gruppoCorrente);
+}
+
+// ─── SYNC: CARICA DA SHEETS ──────────────────────────────
+async function loadFromSheets(gruppo) {
+  if (!SCRIPT_URL) return;
+  setSyncStatus('loading', 'Caricamento...');
+  try {
+    const url = SCRIPT_URL + '?action=load&gruppo=' + gruppo;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    if (data.studenti)  db[gruppo].studenti  = data.studenti;
+    if (data.presenze)  db[gruppo].presenze  = data.presenze;
+    if (data.argomenti) db[gruppo].argomenti = data.argomenti;
+    if (data.voti)      db[gruppo].voti      = data.voti;
+    setSyncStatus('ok', 'Sincronizzato — ' + new Date().toLocaleTimeString('it-IT'));
+    aggiornaSelezioniStudenti();
+    renderTabCorrente();
+  } catch(e) {
+    setSyncStatus('error', 'Errore: ' + e.message);
+  }
+}
+
+// ─── SYNC: SALVA SU SHEETS (con debounce 2s) ─────────────
+function scheduleSave() {
+  if (!SCRIPT_URL) return;
+  setSyncStatus('loading', 'In salvataggio...');
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => saveToSheets(gruppoCorrente), 2000);
+}
+
+async function saveToSheets(gruppo) {
+  if (!SCRIPT_URL) return;
+  try {
+    const g = db[gruppo];
+    const base = SCRIPT_URL + '?gruppo=' + gruppo;
+    await Promise.all([
+      fetch(base + '&action=saveStudenti&data='  + encodeURIComponent(JSON.stringify(g.studenti))),
+      fetch(base + '&action=savePresenze&data='  + encodeURIComponent(JSON.stringify(g.presenze))),
+      fetch(base + '&action=saveArgomenti&data=' + encodeURIComponent(JSON.stringify(g.argomenti))),
+      fetch(base + '&action=saveVoti&data='      + encodeURIComponent(JSON.stringify(g.voti))),
+    ]);
+    setSyncStatus('ok', 'Salvato — ' + new Date().toLocaleTimeString('it-IT'));
+  } catch(e) {
+    setSyncStatus('error', 'Errore salvataggio');
+  }
+}
+
+async function syncNow() {
+  clearTimeout(syncTimer);
+  await saveToSheets(gruppoCorrente);
+}
+
+// ─── UTILITY ─────────────────────────────────────────────
 function getDateLezione(anno, mese) {
   const date = [];
   const giorni = new Date(anno, mese+1, 0).getDate();
   for(let g=1; g<=giorni; g++){
-    const d = new Date(anno, mese, g);
-    if(GIORNI_LEZIONE.includes(d.getDay())){
-      date.push(fmt(d));
-    }
+    const d = new Date(anno, mese, g, 12);
+    if(GIORNI_LEZIONE.includes(d.getDay())) date.push(fmt(d));
   }
   return date;
 }
-
 function fmt(d){ return d.toISOString().split('T')[0]; }
 function fmtDisplay(s){ const p=s.split('-'); return p[2]+'/'+p[1]; }
 function getDow(s){ return new Date(s+'T12:00:00').getDay(); }
 function oggi(){ return fmt(new Date()); }
 
-// Assicura che per ogni data di lezione esista una riga presenze per ogni studente
 function initPresenze(date){
   date.forEach(d => {
     if(!G().presenze[d]) G().presenze[d]={};
@@ -230,15 +352,35 @@ function initPresenze(date){
   });
 }
 
-function getAnnoMese(){
-  const anno = parseInt(document.getElementById('sel-anno').value);
-  const mese = parseInt(document.getElementById('sel-mese').value);
-  return {anno, mese};
+function generaAnniSelect(idSelect){
+  const sel = document.getElementById(idSelect);
+  const ac = new Date().getFullYear();
+  sel.innerHTML = '';
+  for(let i=0; i<5; i++){
+    const y = ac-4+i;
+    const opt = document.createElement('option');
+    opt.value = y; opt.textContent = y;
+    if(y===ac) opt.selected = true;
+    sel.appendChild(opt);
+  }
 }
 
+function getAnnoMese(){
+  return {
+    anno: parseInt(document.getElementById('sel-anno').value),
+    mese: parseInt(document.getElementById('sel-mese').value)
+  };
+}
+
+// ─── NAVIGAZIONE ─────────────────────────────────────────
 function cambiaGruppo(){
   gruppoCorrente = document.getElementById('sel-gruppo').value;
   aggiornaSelezioniStudenti();
+  if(SCRIPT_URL) loadFromSheets(gruppoCorrente);
+  else renderTabCorrente();
+}
+
+function renderTabCorrente(){
   const tabs=['presenze','argomenti','voti','riepilogo'];
   const idx=[...document.querySelectorAll('.tab')].findIndex(b=>b.classList.contains('active'));
   switchTab(tabs[idx]||'presenze');
@@ -257,62 +399,29 @@ function switchTab(t){
 function openModal(id){ document.getElementById(id).classList.add('open'); }
 function closeModal(id){ document.getElementById(id).classList.remove('open'); }
 
+// ─── STUDENTI ────────────────────────────────────────────
 function openModalStudente(){ document.getElementById('m-nome').value=''; openModal('modal-studente'); }
-
-function openModalArgomento(){
-  const {anno,mese}=getAnnoMese();
-  const date=getDateLezione(anno,mese);
-  const sel=document.getElementById('m-arg-data');
-  sel.innerHTML=date.map(d=>`<option value="${d}">${fmtDisplay(d)} ${NOMI_GG[getDow(d)]}</option>`).join('');
-  document.getElementById('m-arg-titolo').value='';
-  document.getElementById('m-arg-note').value='';
-  openModal('modal-argomento');
-}
-
-function openModalVoto(){
-  const sel=document.getElementById('m-voto-studente');
-  sel.innerHTML=G().studenti.map(s=>`<option value="${s.id}">${s.nome}</option>`).join('');
-  document.getElementById('m-voto-data').value=oggi();
-  document.getElementById('m-voto-materia').value='';
-  document.getElementById('m-voto-val').value='';
-  document.getElementById('m-voto-note').value='';
-  openModal('modal-voto');
-}
 
 function aggiungiStudente(){
   const nome=document.getElementById('m-nome').value.trim();
   if(!nome) return;
   const id='s'+Date.now();
   G().studenti.push({id,nome});
-  // inizializza presenza P per tutte le date già esistenti
   Object.keys(G().presenze).forEach(d=>{ G().presenze[d][id]='P'; });
   closeModal('modal-studente');
   aggiornaSelezioniStudenti();
   renderPresenze();
+  scheduleSave();
 }
 
-function aggiungiArgomento(){
-  const data=document.getElementById('m-arg-data').value;
-  const titolo=document.getElementById('m-arg-titolo').value.trim();
-  if(!data||!titolo) return;
-  G().argomenti.push({id:'a'+Date.now(),data,titolo,note:document.getElementById('m-arg-note').value.trim()});
-  G().argomenti.sort((a,b)=>a.data.localeCompare(b.data));
-  closeModal('modal-argomento');
-  renderArgomenti();
+function aggiornaSelezioniStudenti(){
+  const s=document.getElementById('sel-studente-voti');
+  const cur=s.value;
+  s.innerHTML='<option value="">Tutti gli studenti</option>'+G().studenti.map(st=>`<option value="${st.id}">${st.nome}</option>`).join('');
+  s.value=cur;
 }
 
-function aggiungiVoto(){
-  const sid=document.getElementById('m-voto-studente').value;
-  const data=document.getElementById('m-voto-data').value;
-  const materia=document.getElementById('m-voto-materia').value.trim();
-  const val=parseFloat(document.getElementById('m-voto-val').value);
-  if(!sid||!data||!materia||isNaN(val)) return;
-  G().voti.push({id:'v'+Date.now(),sid,data,materia,val,note:document.getElementById('m-voto-note').value.trim()});
-  G().voti.sort((a,b)=>a.data.localeCompare(b.data));
-  closeModal('modal-voto');
-  renderVoti();
-}
-
+// ─── PRESENZE ────────────────────────────────────────────
 function renderPresenze(){
   const anno=parseInt(document.getElementById('sel-anno').value);
   const mese=parseInt(document.getElementById('sel-mese').value);
@@ -320,15 +429,14 @@ function renderPresenze(){
   initPresenze(date);
   const thead=document.getElementById('thead-presenze');
   const tbody=document.getElementById('tbody-presenze');
-  if(!G().studenti.length){
-    thead.innerHTML='<tr><th>Studente</th>'+date.map(d=>{const dw=getDow(d);return`<th class="${['dom','lun','mar','','','','sab'][dw]}" style="color:${COLORI_GG[dw]||'#666'}"><div class="day-label"><span class="dd">${fmtDisplay(d)}</span><span class="dw" style="color:${COLORI_GG[dw]||'#666'}">${NOMI_GG[dw]}</span></div></th>`;}).join('')+'</tr>';
-    tbody.innerHTML='<tr><td class="empty" colspan="'+(date.length+1)+'">Aggiungi studenti con il pulsante + Studente</td></tr>';
-    return;
-  }
   thead.innerHTML='<tr><th>Studente</th>'+date.map(d=>{
     const dw=getDow(d);
     return`<th style="color:${COLORI_GG[dw]||'#666'}"><div class="day-label"><span class="dd">${fmtDisplay(d)}</span><span class="dw" style="color:${COLORI_GG[dw]||'#666'}">${NOMI_GG[dw]}</span></div></th>`;
   }).join('')+'</tr>';
+  if(!G().studenti.length){
+    tbody.innerHTML=`<tr><td class="empty" colspan="${date.length+1}">Aggiungi studenti con il pulsante + Studente</td></tr>`;
+    return;
+  }
   tbody.innerHTML=G().studenti.map(s=>{
     const celle=date.map(d=>{
       const stato=G().presenze[d]?.[s.id]||'P';
@@ -346,6 +454,29 @@ function renderPresenze(){
 function cambiaStato(data,sid,val){
   if(!G().presenze[data]) G().presenze[data]={};
   G().presenze[data][sid]=val;
+  scheduleSave();
+}
+
+// ─── ARGOMENTI ───────────────────────────────────────────
+function openModalArgomento(){
+  const {anno,mese}=getAnnoMese();
+  const date=getDateLezione(anno,mese);
+  const sel=document.getElementById('m-arg-data');
+  sel.innerHTML=date.map(d=>`<option value="${d}">${fmtDisplay(d)} ${NOMI_GG[getDow(d)]}</option>`).join('');
+  document.getElementById('m-arg-titolo').value='';
+  document.getElementById('m-arg-note').value='';
+  openModal('modal-argomento');
+}
+
+function aggiungiArgomento(){
+  const data=document.getElementById('m-arg-data').value;
+  const titolo=document.getElementById('m-arg-titolo').value.trim();
+  if(!data||!titolo) return;
+  G().argomenti.push({id:'a'+Date.now(),data,titolo,note:document.getElementById('m-arg-note').value.trim()});
+  G().argomenti.sort((a,b)=>a.data.localeCompare(b.data));
+  closeModal('modal-argomento');
+  renderArgomenti();
+  scheduleSave();
 }
 
 function renderArgomenti(){
@@ -365,13 +496,34 @@ function renderArgomenti(){
   </tr>`).join('');
 }
 
-function eliminaArgomento(id){ db[gruppoCorrente].argomenti=G().argomenti.filter(a=>a.id!==id);renderArgomenti();}
+function eliminaArgomento(id){
+  db[gruppoCorrente].argomenti=G().argomenti.filter(a=>a.id!==id);
+  renderArgomenti();
+  scheduleSave();
+}
 
-function aggiornaSelezioniStudenti(){
-  const s=document.getElementById('sel-studente-voti');
-  const cur=s.value;
-  s.innerHTML='<option value="">Tutti gli studenti</option>'+G().studenti.map(st=>`<option value="${st.id}">${st.nome}</option>`).join('');
-  s.value=cur;
+// ─── VOTI ────────────────────────────────────────────────
+function openModalVoto(){
+  const sel=document.getElementById('m-voto-studente');
+  sel.innerHTML=G().studenti.map(s=>`<option value="${s.id}">${s.nome}</option>`).join('');
+  document.getElementById('m-voto-data').value=oggi();
+  document.getElementById('m-voto-materia').value='';
+  document.getElementById('m-voto-val').value='';
+  document.getElementById('m-voto-note').value='';
+  openModal('modal-voto');
+}
+
+function aggiungiVoto(){
+  const sid=document.getElementById('m-voto-studente').value;
+  const data=document.getElementById('m-voto-data').value;
+  const materia=document.getElementById('m-voto-materia').value.trim();
+  const val=parseFloat(document.getElementById('m-voto-val').value);
+  if(!sid||!data||!materia||isNaN(val)) return;
+  G().voti.push({id:'v'+Date.now(),sid,data,materia,val,note:document.getElementById('m-voto-note').value.trim()});
+  G().voti.sort((a,b)=>a.data.localeCompare(b.data));
+  closeModal('modal-voto');
+  renderVoti();
+  scheduleSave();
 }
 
 function renderVoti(){
@@ -393,8 +545,13 @@ function renderVoti(){
   }).join('');
 }
 
-function eliminaVoto(id){ db[gruppoCorrente].voti=G().voti.filter(v=>v.id!==id);renderVoti();}
+function eliminaVoto(id){
+  db[gruppoCorrente].voti=G().voti.filter(v=>v.id!==id);
+  renderVoti();
+  scheduleSave();
+}
 
+// ─── RIEPILOGO ───────────────────────────────────────────
 function renderRiepilogo(){
   const anno=parseInt(document.getElementById('sel-anno-ris').value);
   const mese=parseInt(document.getElementById('sel-mese-ris').value);
@@ -424,26 +581,26 @@ function renderRiepilogo(){
   }).join('');
 }
 
-// Dati demo
-db.A.studenti=[{id:'s1',nome:'Luca Bianchi'},{id:'s2',nome:'Sara Ferrari'},{id:'s3',nome:'Ahmed Malik'}];
-db.B.studenti=[{id:'b1',nome:'Fatima Al-Hassan'},{id:'b2',nome:'Marco Ricci'},{id:'b3',nome:'Talha'}];
+// ─── INIT ────────────────────────────────────────────────
+generaAnniSelect('sel-anno');
+generaAnniSelect('sel-anno-arg');
+generaAnniSelect('sel-anno-ris');
 
-// Demo presenze aprile 2026 gruppo A
-const dateAprile=getDateLezione(2026,3);
-dateAprile.forEach(d=>{
-  db.A.presenze[d]={};
-  db.A.presenze[d]['s1']=Math.random()>.15?'P':'A';
-  db.A.presenze[d]['s2']=Math.random()>.2?'P':(Math.random()>.5?'A':'R');
-  db.A.presenze[d]['s3']=Math.random()>.1?'P':'A';
+// Imposta mese corrente
+const meseCorriente = new Date().getMonth();
+['sel-mese','sel-mese-arg','sel-mese-ris'].forEach(id => {
+  document.getElementById(id).value = meseCorriente;
 });
-dateAprile.forEach(d=>{
-  db.B.presenze[d]={};
-  db.B.presenze[d]['b1']=Math.random()>.1?'P':'A';
-  db.B.presenze[d]['b2']=Math.random()>.15?'P':'A';
-  db.B.presenze[d]['b3']='P';
-});
-db.A.argomenti=[{id:'a1',data:'2026-04-05',titolo:"Tajweed - regole nun sakin",note:'Pagine 12-15'},{id:'a2',data:'2026-04-12',titolo:"Memorizzazione Surah Al-Mulk",note:''}];
 
 aggiornaSelezioniStudenti();
-renderPresenze();
+
+if(SCRIPT_URL){
+  document.getElementById('m-script-url').value = SCRIPT_URL;
+  loadFromSheets('A');
+} else {
+  setSyncStatus('', 'Non configurato — clicca ⚙ per connettere Google Sheets');
+  renderPresenze();
+}
 </script>
+</body>
+</html>
