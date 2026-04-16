@@ -286,10 +286,23 @@ async function loadFromSheets(gruppo) {
     const res = await fetch(url);
     const data = await res.json();
     if (data.error) throw new Error(data.error);
-    if (data.studenti)  db[gruppo].studenti  = data.studenti;
-    if (data.presenze)  db[gruppo].presenze  = data.presenze;
-    if (data.argomenti) db[gruppo].argomenti = data.argomenti;
-    if (data.voti)      db[gruppo].voti      = data.voti;
+    // Carica studenti
+    if (data.studenti && data.studenti.length) db[gruppo].studenti = data.studenti;
+    // Carica presenze — normalizza le chiavi a stringa YYYY-MM-DD
+    if (data.presenze && Object.keys(data.presenze).length) {
+      const presenzeNorm = {};
+      Object.entries(data.presenze).forEach(([dataKey, studObj]) => {
+        // Sheets a volte restituisce la data come "2026-04-05T00:00:00.000Z" o simili
+        const keyPulita = String(dataKey).substring(0, 10);
+        presenzeNorm[keyPulita] = {};
+        Object.entries(studObj).forEach(([sid, stato]) => {
+          presenzeNorm[keyPulita][String(sid)] = stato;
+        });
+      });
+      db[gruppo].presenze = presenzeNorm;
+    }
+    if (data.argomenti && data.argomenti.length) db[gruppo].argomenti = data.argomenti;
+    if (data.voti && data.voti.length) db[gruppo].voti = data.voti;
     setSyncStatus('ok', 'Sincronizzato — ' + new Date().toLocaleTimeString('it-IT'));
     aggiornaSelezioniStudenti();
     renderTabCorrente();
@@ -306,20 +319,35 @@ function scheduleSave() {
   syncTimer = setTimeout(() => saveToSheets(gruppoCorrente), 2000);
 }
 
+async function gsFetch(action, gruppo, payload) {
+  // Usa GET con i parametri — Apps Script accetta solo GET per doGet
+  const url = SCRIPT_URL
+    + '?action=' + action
+    + '&gruppo=' + gruppo
+    + '&data=' + encodeURIComponent(JSON.stringify(payload));
+  const res = await fetch(url);
+  const json = await res.json();
+  if (json.error) throw new Error(action + ': ' + json.error);
+  return json;
+}
+
 async function saveToSheets(gruppo) {
   if (!SCRIPT_URL) return;
+  // Flag anti-doppio-salvataggio
+  if (saveToSheets._running) return;
+  saveToSheets._running = true;
   try {
     const g = db[gruppo];
-    const base = SCRIPT_URL + '?gruppo=' + gruppo;
-    await Promise.all([
-      fetch(base + '&action=saveStudenti&data='  + encodeURIComponent(JSON.stringify(g.studenti))),
-      fetch(base + '&action=savePresenze&data='  + encodeURIComponent(JSON.stringify(g.presenze))),
-      fetch(base + '&action=saveArgomenti&data=' + encodeURIComponent(JSON.stringify(g.argomenti))),
-      fetch(base + '&action=saveVoti&data='      + encodeURIComponent(JSON.stringify(g.voti))),
-    ]);
+    // Sequenziale per evitare conflitti sul foglio Google
+    await gsFetch('saveStudenti',  gruppo, g.studenti);
+    await gsFetch('savePresenze',  gruppo, g.presenze);
+    await gsFetch('saveArgomenti', gruppo, g.argomenti);
+    await gsFetch('saveVoti',      gruppo, g.voti);
     setSyncStatus('ok', 'Salvato — ' + new Date().toLocaleTimeString('it-IT'));
   } catch(e) {
-    setSyncStatus('error', 'Errore salvataggio');
+    setSyncStatus('error', 'Errore: ' + e.message);
+  } finally {
+    saveToSheets._running = false;
   }
 }
 
@@ -344,10 +372,14 @@ function getDow(s){ return new Date(s+'T12:00:00').getDay(); }
 function oggi(){ return fmt(new Date()); }
 
 function initPresenze(date){
+  // Aggiunge SOLO le combinazioni data/studente che non esistono ancora nel db
+  // Non sovrascrive mai i dati caricati da Google Sheets
   date.forEach(d => {
-    if(!G().presenze[d]) G().presenze[d]={};
+    if(!G().presenze[d]) G().presenze[d] = {};
     G().studenti.forEach(s => {
-      if(G().presenze[d][s.id]===undefined) G().presenze[d][s.id]='P';
+      if(G().presenze[d][s.id] === undefined) {
+        G().presenze[d][s.id] = 'P'; // default solo se proprio non esiste
+      }
     });
   });
 }
