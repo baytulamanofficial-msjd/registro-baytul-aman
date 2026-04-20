@@ -560,19 +560,26 @@ function renderPresenze(){
   const anno=parseInt(document.getElementById('sel-anno').value);
   const mese=parseInt(document.getElementById('sel-mese').value);
   const date=getDateLezione(anno,mese);
-  initPresenze(date);
+  // initPresenze solo sulle date passate/oggi — non toccare le future
+  const oggi_ = oggi();
+  const datePassate = date.filter(d => d <= oggi_);
+  initPresenze(datePassate);
   const thead=document.getElementById('thead-presenze');
   const tbody=document.getElementById('tbody-presenze');
   thead.innerHTML='<tr><th>Studente</th>'+date.map(d=>{
     const dw=getDow(d);
-    return`<th style="color:${COLORI_GG[dw]||'#666'}"><div class="day-label"><span class="dd">${fmtDisplay(d)}</span><span class="dw" style="color:${COLORI_GG[dw]||'#666'}">${NOMI_GG[dw]}</span></div></th>`;
+    const isFutura = d > oggi_;
+    return`<th style="color:${isFutura?'#2a2a2a':COLORI_GG[dw]||'#666'}"><div class="day-label"><span class="dd">${fmtDisplay(d)}</span><span class="dw" style="color:${isFutura?'#2a2a2a':COLORI_GG[dw]||'#666'}">${NOMI_GG[dw]}</span></div></th>`;
   }).join('')+'</tr>';
   if(!G().studenti.length){
-    tbody.innerHTML=`<tr><td class="empty" colspan="${date.length+1}">Aggiungi studenti con il pulsante + Studente</td></tr>`;
+    tbody.innerHTML=`<tr><td class="empty" colspan="${date.length+1}">Aggiungi studenti dalla tab Gestisci</td></tr>`;
     return;
   }
   tbody.innerHTML=G().studenti.map(s=>{
     const celle=date.map(d=>{
+      const isFutura = d > oggi_;
+      // Cella futura: nera vuota, non cliccabile
+      if(isFutura) return`<td style="background:#0a0a0a;"></td>`;
       const stato=G().presenze[d]?.[s.id]||'P';
       const col=stato==='P'?'#5DCAA5':stato==='A'?'#f09595':'#EF9F27';
       return`<td><select onchange="cambiaStato('${d}','${s.id}',this.value)" style="font-size:12px;border:none;background:none;color:${col};font-weight:500;cursor:pointer;padding:2px 4px;">
