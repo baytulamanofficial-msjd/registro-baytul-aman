@@ -171,6 +171,11 @@ select option{background:#1a1a1a;color:#e8e6e0;}
 <div id="tab-gestisci" class="section">
   <div class="top-bar">
     <button class="btn primary" onclick="openModalStudente()">+ Aggiungi studente</button>
+    <select id="filtro-gruppo-gestisci" onchange="renderGestisci()" style="font-size:13px;padding:6px 10px;border-radius:8px;border:.5px solid #333;background:#1a1a1a;color:#e8e6e0;height:34px;">
+      <option value="">Tutti i gruppi</option>
+      <option value="A">Gruppo A</option>
+      <option value="B">Gruppo B</option>
+    </select>
   </div>
   <div class="table-wrap">
     <table>
@@ -178,6 +183,7 @@ select option{background:#1a1a1a;color:#e8e6e0;}
         <tr>
           <th>Nome</th>
           <th>Gruppo</th>
+          <th></th>
           <th></th>
         </tr>
       </thead>
@@ -218,6 +224,26 @@ select option{background:#1a1a1a;color:#e8e6e0;}
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('modal-studente')">Annulla</button>
       <button class="btn primary" onclick="aggiungiStudente()">Aggiungi</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL MODIFICA STUDENTE -->
+<div class="modal-bg" id="modal-modifica-studente">
+  <div class="modal">
+    <h3>Modifica studente</h3>
+    <input type="hidden" id="m-mod-stud-id">
+    <input type="hidden" id="m-mod-stud-gruppo-old">
+    <label>Nome e cognome</label>
+    <input type="text" id="m-mod-stud-nome" placeholder="Es. Mario Rossi">
+    <label>Gruppo</label>
+    <select id="m-mod-stud-gruppo">
+      <option value="A">Gruppo A</option>
+      <option value="B">Gruppo B</option>
+    </select>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modal-modifica-studente')">Annulla</button>
+      <button class="btn primary" onclick="salvaModificaStudente()">Salva</button>
     </div>
   </div>
 </div>
@@ -578,17 +604,20 @@ function aggiungiStudente(){
 
 function renderGestisci(){
   const tbody=document.getElementById('tbody-gestisci');
-  const tutti=[
+  const filtro=document.getElementById('filtro-gruppo-gestisci').value;
+  let tutti=[
     ...db.A.studenti.map(s=>({...s,gruppo:'A'})),
     ...db.B.studenti.map(s=>({...s,gruppo:'B'}))
   ].sort((a,b)=>a.nome.localeCompare(b.nome));
+  if(filtro) tutti=tutti.filter(s=>s.gruppo===filtro);
   if(!tutti.length){
-    tbody.innerHTML='<tr><td class="empty" colspan="3">Nessuno studente ancora</td></tr>';
+    tbody.innerHTML=`<tr><td class="empty" colspan="4">${filtro?'Nessuno studente nel Gruppo '+filtro:'Nessuno studente ancora'}</td></tr>`;
     return;
   }
   tbody.innerHTML=tutti.map(s=>`<tr>
     <td style="font-weight:500;color:#e8e6e0">${s.nome}</td>
     <td><span style="font-size:12px;font-weight:500;color:${s.gruppo==='A'?'#4a9abf':'#9a4abf'};background:${s.gruppo==='A'?'#0d1e26':'#1a0d26'};padding:3px 10px;border-radius:99px;">Gruppo ${s.gruppo}</span></td>
+    <td><button class="btn" style="padding:3px 10px;font-size:11px" onclick="apriModificaStudente('${s.id}','${s.gruppo}')">Modifica</button></td>
     <td><button class="btn danger" style="padding:3px 10px;font-size:11px" onclick="eliminaStudente('${s.id}','${s.gruppo}')">Rimuovi</button></td>
   </tr>`).join('');
 }
@@ -627,6 +656,62 @@ function confermaEliminaStudente(){
   scheduleSave('studenti');
   scheduleSave('presenze');
   scheduleSave('voti');
+}
+
+function apriModificaStudente(id, gruppo){
+  const s = db[gruppo].studenti.find(s => s.id === id);
+  if(!s) return;
+  document.getElementById('m-mod-stud-id').value        = s.id;
+  document.getElementById('m-mod-stud-gruppo-old').value = gruppo;
+  document.getElementById('m-mod-stud-nome').value       = s.nome;
+  document.getElementById('m-mod-stud-gruppo').value     = gruppo;
+  openModal('modal-modifica-studente');
+}
+
+function salvaModificaStudente(){
+  const id          = document.getElementById('m-mod-stud-id').value;
+  const gruppoOld   = document.getElementById('m-mod-stud-gruppo-old').value;
+  const nome        = document.getElementById('m-mod-stud-nome').value.trim();
+  const gruppoNew   = document.getElementById('m-mod-stud-gruppo').value;
+  if(!id || !nome) return;
+
+  if(gruppoOld === gruppoNew){
+    // Stesso gruppo — aggiorna solo il nome
+    const idx = db[gruppoOld].studenti.findIndex(s => s.id === id);
+    if(idx !== -1) db[gruppoOld].studenti[idx].nome = nome;
+    scheduleSave('studenti');
+  } else {
+    // Cambio gruppo — sposta lo studente e trasferisci presenze/voti
+    db[gruppoOld].studenti = db[gruppoOld].studenti.filter(s => s.id !== id);
+
+    // Aggiungi al nuovo gruppo
+    db[gruppoNew].studenti.push({id, nome});
+
+    // Trasferisci presenze nel nuovo gruppo
+    Object.keys(db[gruppoOld].presenze).forEach(data => {
+      const stato = db[gruppoOld].presenze[data][id];
+      if(stato !== undefined){
+        if(!db[gruppoNew].presenze[data]) db[gruppoNew].presenze[data] = {};
+        db[gruppoNew].presenze[data][id] = stato;
+        delete db[gruppoOld].presenze[data][id];
+      }
+    });
+
+    // Trasferisci voti nel nuovo gruppo
+    const votiDaSpostare = db[gruppoOld].voti.filter(v => v.sid === id);
+    db[gruppoOld].voti   = db[gruppoOld].voti.filter(v => v.sid !== id);
+    db[gruppoNew].voti   = [...db[gruppoNew].voti, ...votiDaSpostare]
+                             .sort((a,b) => a.data.localeCompare(b.data));
+
+    scheduleSave('studenti');
+    scheduleSave('presenze');
+    scheduleSave('voti');
+  }
+
+  closeModal('modal-modifica-studente');
+  aggiornaSelezioniStudenti();
+  markDirtyAll();
+  renderGestisci(); dirty.gestisci = false;
 }
 
 function aggiornaSelezioniStudenti(){
