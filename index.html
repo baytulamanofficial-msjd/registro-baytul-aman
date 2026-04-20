@@ -94,6 +94,7 @@ select option{background:#1a1a1a;color:#e8e6e0;}
   <button class="tab" onclick="switchTab('argomenti')">Argomenti</button>
   <button class="tab" onclick="switchTab('voti')">Voti</button>
   <button class="tab" onclick="switchTab('riepilogo')">Riepilogo</button>
+  <button class="tab" onclick="switchTab('gestisci')">Gestisci</button>
 </div>
 
 <!-- PRESENZE -->
@@ -108,7 +109,6 @@ select option{background:#1a1a1a;color:#e8e6e0;}
       <option value="8">Settembre</option><option value="9">Ottobre</option>
       <option value="10">Novembre</option><option value="11">Dicembre</option>
     </select>
-    <button class="btn" onclick="openModalStudente()">+ Studente</button>
   </div>
   <div class="table-wrap">
     <table><thead id="thead-presenze"></thead><tbody id="tbody-presenze"></tbody></table>
@@ -167,6 +167,25 @@ select option{background:#1a1a1a;color:#e8e6e0;}
   </div>
 </div>
 
+<!-- GESTISCI STUDENTI -->
+<div id="tab-gestisci" class="section">
+  <div class="top-bar">
+    <button class="btn primary" onclick="openModalStudente()">+ Aggiungi studente</button>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>Gruppo</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="tbody-gestisci"></tbody>
+    </table>
+  </div>
+</div>
+
 <!-- MODAL CONFIG GOOGLE SHEETS -->
 <div class="modal-bg" id="modal-config">
   <div class="modal">
@@ -191,6 +210,11 @@ select option{background:#1a1a1a;color:#e8e6e0;}
     <h3>Nuovo studente</h3>
     <label>Nome e cognome</label>
     <input type="text" id="m-nome" placeholder="Es. Mario Rossi">
+    <label>Gruppo</label>
+    <select id="m-gruppo-studente">
+      <option value="A">Gruppo A</option>
+      <option value="B">Gruppo B</option>
+    </select>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('modal-studente')">Annulla</button>
       <button class="btn primary" onclick="aggiungiStudente()">Aggiungi</button>
@@ -198,7 +222,26 @@ select option{background:#1a1a1a;color:#e8e6e0;}
   </div>
 </div>
 
-<!-- MODAL ARGOMENTO -->
+<!-- MODAL ELIMINA STUDENTE -->
+<div class="modal-bg" id="modal-elimina-studente">
+  <div class="modal">
+    <h3>Conferma rimozione</h3>
+    <p style="font-size:13px;color:#888;margin-bottom:1rem;line-height:1.6">Stai per rimuovere il seguente studente. Verranno eliminate anche tutte le sue presenze e voti.</p>
+    <div style="background:#1a1a1a;border:.5px solid #333;border-radius:8px;padding:0.9rem 1rem;margin-bottom:1rem;">
+      <div style="font-size:13px;color:#666;margin-bottom:4px;">Nome</div>
+      <div id="m-elimina-nome" style="font-size:15px;font-weight:500;color:#e8e6e0;"></div>
+    </div>
+    <div style="background:#1a1a1a;border:.5px solid #333;border-radius:8px;padding:0.9rem 1rem;margin-bottom:1.25rem;">
+      <div style="font-size:13px;color:#666;margin-bottom:4px;">Gruppo di appartenenza</div>
+      <div id="m-elimina-gruppo" style="font-size:15px;font-weight:500;"></div>
+    </div>
+    <p style="font-size:12px;color:#f09595;margin-bottom:1rem;">Questa azione non può essere annullata.</p>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modal-elimina-studente')">Annulla</button>
+      <button class="btn danger" style="border-color:#f09595" id="btn-conferma-elimina" onclick="confermaEliminaStudente()">Sì, rimuovi</button>
+    </div>
+  </div>
+</div>
 <div class="modal-bg" id="modal-argomento">
   <div class="modal">
     <h3>Aggiungi argomento</h3>
@@ -286,13 +329,10 @@ async function loadFromSheets(gruppo) {
     const res = await fetch(url);
     const data = await res.json();
     if (data.error) throw new Error(data.error);
-    // Carica studenti
     if (data.studenti && data.studenti.length) db[gruppo].studenti = data.studenti;
-    // Carica presenze — normalizza le chiavi a stringa YYYY-MM-DD
     if (data.presenze && Object.keys(data.presenze).length) {
       const presenzeNorm = {};
       Object.entries(data.presenze).forEach(([dataKey, studObj]) => {
-        // Sheets a volte restituisce la data come "2026-04-05T00:00:00.000Z" o simili
         const keyPulita = String(dataKey).substring(0, 10);
         presenzeNorm[keyPulita] = {};
         Object.entries(studObj).forEach(([sid, stato]) => {
@@ -305,7 +345,7 @@ async function loadFromSheets(gruppo) {
     if (data.voti && data.voti.length) db[gruppo].voti = data.voti;
     setSyncStatus('ok', 'Sincronizzato — ' + new Date().toLocaleTimeString('it-IT'));
     aggiornaSelezioniStudenti();
-    renderTabCorrente();
+    // Non chiama renderTabCorrente qui — ci pensa l'init dopo che entrambi i gruppi sono pronti
   } catch(e) {
     setSyncStatus('error', 'Errore: ' + e.message);
   }
@@ -408,42 +448,104 @@ function getAnnoMese(){
 function cambiaGruppo(){
   gruppoCorrente = document.getElementById('sel-gruppo').value;
   aggiornaSelezioniStudenti();
-  if(SCRIPT_URL) loadFromSheets(gruppoCorrente);
+  if(SCRIPT_URL) loadFromSheets(gruppoCorrente).then(renderTabCorrente);
   else renderTabCorrente();
 }
 
 function renderTabCorrente(){
-  const tabs=['presenze','argomenti','voti','riepilogo'];
+  const tabs=['presenze','argomenti','voti','riepilogo','gestisci'];
   const idx=[...document.querySelectorAll('.tab')].findIndex(b=>b.classList.contains('active'));
   switchTab(tabs[idx]||'presenze');
 }
 
 function switchTab(t){
-  document.querySelectorAll('.tab').forEach((b,i)=>b.classList.toggle('active',['presenze','argomenti','voti','riepilogo'][i]===t));
+  document.querySelectorAll('.tab').forEach((b,i)=>b.classList.toggle('active',['presenze','argomenti','voti','riepilogo','gestisci'][i]===t));
   document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
   document.getElementById('tab-'+t).classList.add('active');
   if(t==='presenze') renderPresenze();
   if(t==='argomenti') renderArgomenti();
   if(t==='voti') renderVoti();
   if(t==='riepilogo') renderRiepilogo();
+  if(t==='gestisci') renderGestisci();
 }
 
 function openModal(id){ document.getElementById(id).classList.add('open'); }
 function closeModal(id){ document.getElementById(id).classList.remove('open'); }
 
 // ─── STUDENTI ────────────────────────────────────────────
-function openModalStudente(){ document.getElementById('m-nome').value=''; openModal('modal-studente'); }
+function openModalStudente(){
+  document.getElementById('m-nome').value='';
+  document.getElementById('m-gruppo-studente').value='A';
+  openModal('modal-studente');
+}
 
 function aggiungiStudente(){
   const nome=document.getElementById('m-nome').value.trim();
+  const gruppo=document.getElementById('m-gruppo-studente').value;
   if(!nome) return;
   const id='s'+Date.now();
-  G().studenti.push({id,nome});
-  Object.keys(G().presenze).forEach(d=>{ G().presenze[d][id]='P'; });
+  db[gruppo].studenti.push({id,nome});
+  Object.keys(db[gruppo].presenze).forEach(d=>{ db[gruppo].presenze[d][id]='P'; });
   closeModal('modal-studente');
   aggiornaSelezioniStudenti();
-  renderPresenze();
-  scheduleSave();
+  renderGestisci();
+  if(SCRIPT_URL){
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(() => saveToSheets(gruppo), 2000);
+  }
+}
+
+function renderGestisci(){
+  const tbody=document.getElementById('tbody-gestisci');
+  const tutti=[
+    ...db.A.studenti.map(s=>({...s,gruppo:'A'})),
+    ...db.B.studenti.map(s=>({...s,gruppo:'B'}))
+  ].sort((a,b)=>a.nome.localeCompare(b.nome));
+  if(!tutti.length){
+    tbody.innerHTML='<tr><td class="empty" colspan="3">Nessuno studente ancora</td></tr>';
+    return;
+  }
+  tbody.innerHTML=tutti.map(s=>`<tr>
+    <td style="font-weight:500;color:#e8e6e0">${s.nome}</td>
+    <td><span style="font-size:12px;font-weight:500;color:${s.gruppo==='A'?'#4a9abf':'#9a4abf'};background:${s.gruppo==='A'?'#0d1e26':'#1a0d26'};padding:3px 10px;border-radius:99px;">Gruppo ${s.gruppo}</span></td>
+    <td><button class="btn danger" style="padding:3px 10px;font-size:11px" onclick="eliminaStudente('${s.id}','${s.gruppo}')">Rimuovi</button></td>
+  </tr>`).join('');
+}
+
+// id e gruppo dello studente da eliminare — salvati quando si apre la modal
+let _eliminaId = null;
+let _eliminaGruppo = null;
+
+function eliminaStudente(id, gruppo){
+  const s = db[gruppo].studenti.find(s => s.id === id);
+  if(!s) return;
+  _eliminaId = id;
+  _eliminaGruppo = gruppo;
+  // Popola la modal con i dati dello studente
+  document.getElementById('m-elimina-nome').textContent = s.nome;
+  const colGruppo = gruppo === 'A' ? '#4a9abf' : '#9a4abf';
+  const bgGruppo  = gruppo === 'A' ? '#0d1e26' : '#1a0d26';
+  document.getElementById('m-elimina-gruppo').innerHTML =
+    `<span style="color:${colGruppo};background:${bgGruppo};padding:3px 12px;border-radius:99px;">Gruppo ${gruppo}</span>`;
+  openModal('modal-elimina-studente');
+}
+
+function confermaEliminaStudente(){
+  const id = _eliminaId;
+  const gruppo = _eliminaGruppo;
+  if(!id || !gruppo) return;
+  db[gruppo].studenti = db[gruppo].studenti.filter(s => s.id !== id);
+  Object.keys(db[gruppo].presenze).forEach(d => { delete db[gruppo].presenze[d][id]; });
+  db[gruppo].voti = db[gruppo].voti.filter(v => v.sid !== id);
+  _eliminaId = null;
+  _eliminaGruppo = null;
+  closeModal('modal-elimina-studente');
+  aggiornaSelezioniStudenti();
+  renderGestisci();
+  if(SCRIPT_URL){
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(() => saveToSheets(gruppo), 2000);
+  }
 }
 
 function aggiornaSelezioniStudenti(){
@@ -618,7 +720,6 @@ generaAnniSelect('sel-anno');
 generaAnniSelect('sel-anno-arg');
 generaAnniSelect('sel-anno-ris');
 
-// Imposta mese corrente
 const meseCorriente = new Date().getMonth();
 ['sel-mese','sel-mese-arg','sel-mese-ris'].forEach(id => {
   document.getElementById(id).value = meseCorriente;
@@ -627,10 +728,13 @@ const meseCorriente = new Date().getMonth();
 aggiornaSelezioniStudenti();
 
 if(SCRIPT_URL){
-  document.getElementById('m-script-url').value = SCRIPT_URL;
-  loadFromSheets('A');
+  setSyncStatus('loading', 'Connessione al database...');
+  // Carica entrambi i gruppi in parallelo all'avvio
+  Promise.all([loadFromSheets('A'), loadFromSheets('B')]).then(() => {
+    renderTabCorrente();
+  });
 } else {
-  setSyncStatus('', 'Non configurato — clicca ⚙ per connettere Google Sheets');
+  setSyncStatus('error', 'URL script non configurato');
   renderPresenze();
 }
 </script>
