@@ -130,7 +130,7 @@ select option{background:#1a1a1a;color:#e8e6e0;}
     <button class="btn" onclick="openModalArgomento()">+ Argomento</button>
   </div>
   <div class="table-wrap">
-    <table><thead><tr><th>Data</th><th>Argomento</th><th>Note</th><th></th></tr></thead>
+    <table><thead><tr><th>Data</th><th>Argomento</th><th>Note</th><th></th><th></th></tr></thead>
     <tbody id="tbody-argomenti"></tbody></table>
   </div>
 </div>
@@ -142,7 +142,7 @@ select option{background:#1a1a1a;color:#e8e6e0;}
     <button class="btn" onclick="openModalVoto()">+ Voto</button>
   </div>
   <div class="table-wrap">
-    <table><thead><tr><th>Studente</th><th>Data</th><th>Tipo</th><th>Voto</th><th>Note</th><th></th></tr></thead>
+    <table><thead><tr><th>Studente</th><th>Data</th><th>Tipo</th><th>Voto</th><th>Note</th><th></th><th></th></tr></thead>
     <tbody id="tbody-voti"></tbody></table>
   </div>
 </div>
@@ -279,6 +279,46 @@ select option{background:#1a1a1a;color:#e8e6e0;}
   </div>
 </div>
 
+<!-- MODAL MODIFICA ARGOMENTO -->
+<div class="modal-bg" id="modal-modifica-argomento">
+  <div class="modal">
+    <h3>Modifica argomento</h3>
+    <input type="hidden" id="m-mod-arg-id">
+    <label>Data lezione</label>
+    <select id="m-mod-arg-data"></select>
+    <label>Argomento svolto</label>
+    <input type="text" id="m-mod-arg-titolo" placeholder="Es. Tajweed - regole nun sakin">
+    <label>Note aggiuntive</label>
+    <textarea id="m-mod-arg-note" placeholder="Dettagli, materiali, ecc."></textarea>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modal-modifica-argomento')">Annulla</button>
+      <button class="btn primary" onclick="salvaModificaArgomento()">Salva</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL MODIFICA VOTO -->
+<div class="modal-bg" id="modal-modifica-voto">
+  <div class="modal">
+    <h3>Modifica voto</h3>
+    <input type="hidden" id="m-mod-voto-id">
+    <label>Studente</label>
+    <select id="m-mod-voto-studente"></select>
+    <label>Data</label>
+    <input type="date" id="m-mod-voto-data">
+    <label>Tipo valutazione</label>
+    <input type="text" id="m-mod-voto-materia" placeholder="Es. Verifica, Orale, Recita...">
+    <label>Voto</label>
+    <input type="number" id="m-mod-voto-val" min="1" max="10" step="0.5" placeholder="1–10">
+    <label>Note</label>
+    <textarea id="m-mod-voto-note" placeholder="Osservazioni facoltative"></textarea>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modal-modifica-voto')">Annulla</button>
+      <button class="btn primary" onclick="salvaModificaVoto()">Salva</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ─── COSTANTI ────────────────────────────────────────────
 const GIORNI_LEZIONE = [6, 0, 1, 2]; // sab, dom, lun, mar
@@ -295,7 +335,7 @@ let gruppoCorrente = 'A';
 function G(){ return db[gruppoCorrente]; }
 
 // ─── GOOGLE SHEETS CONFIG ────────────────────────────────
-let SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwl3UAK1Eh7ptXL_jWwlmXzX2dy1oL5jf3En-MaBf65UKvGSaQgtA9FDXvJQjY3dHp1/exec";
+let SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx-7TfHp0148JtbtHmeHHEDkgETdkobzkHtbkFbqoNpreWco42fvH9t9AZpYdWuSpAB/exec";
 let syncPending = false;
 let syncTimer = null;
 
@@ -644,17 +684,51 @@ function renderArgomenti(){
     const d=new Date(a.data+'T12:00:00');
     return d.getFullYear()===anno&&d.getMonth()===mese;
   });
-  if(!filtrati.length){tbody.innerHTML='<tr><td class="empty" colspan="4">Nessun argomento in questo mese</td></tr>';return;}
+  if(!filtrati.length){tbody.innerHTML='<tr><td class="empty" colspan="5">Nessun argomento in questo mese</td></tr>';return;}
   tbody.innerHTML=filtrati.map(a=>`<tr>
     <td>${fmtDisplay(a.data)} <span style="color:${COLORI_GG[getDow(a.data)]||'#666'};font-size:11px">${NOMI_GG[getDow(a.data)]}</span></td>
     <td style="font-weight:500;color:#e8e6e0">${a.titolo}</td>
     <td style="color:#666;font-size:12px">${a.note||'—'}</td>
+    <td><button class="btn" style="padding:3px 8px;font-size:11px" onclick="apriModificaArgomento('${a.id}')">Modifica</button></td>
     <td><button class="btn danger" style="padding:3px 8px;font-size:11px" onclick="eliminaArgomento('${a.id}')">Elimina</button></td>
   </tr>`).join('');
 }
 
 function eliminaArgomento(id){
   db[gruppoCorrente].argomenti=G().argomenti.filter(a=>a.id!==id);
+  renderArgomenti();
+  scheduleSave();
+}
+
+function apriModificaArgomento(id){
+  const a = G().argomenti.find(a => a.id === id);
+  if(!a) return;
+  const {anno, mese} = {
+    anno: parseInt(document.getElementById('sel-anno-arg').value),
+    mese: parseInt(document.getElementById('sel-mese-arg').value)
+  };
+  // Popola select date del mese corrente
+  const date = getDateLezione(anno, mese);
+  const sel = document.getElementById('m-mod-arg-data');
+  sel.innerHTML = date.map(d=>`<option value="${d}">${fmtDisplay(d)} ${NOMI_GG[getDow(d)]}</option>`).join('');
+  // Precompila i valori esistenti
+  document.getElementById('m-mod-arg-id').value    = a.id;
+  sel.value                                         = a.data;
+  document.getElementById('m-mod-arg-titolo').value = a.titolo;
+  document.getElementById('m-mod-arg-note').value   = a.note || '';
+  openModal('modal-modifica-argomento');
+}
+
+function salvaModificaArgomento(){
+  const id     = document.getElementById('m-mod-arg-id').value;
+  const data   = document.getElementById('m-mod-arg-data').value;
+  const titolo = document.getElementById('m-mod-arg-titolo').value.trim();
+  if(!id || !data || !titolo) return;
+  const idx = G().argomenti.findIndex(a => a.id === id);
+  if(idx === -1) return;
+  G().argomenti[idx] = { id, data, titolo, note: document.getElementById('m-mod-arg-note').value.trim() };
+  G().argomenti.sort((a,b) => a.data.localeCompare(b.data));
+  closeModal('modal-modifica-argomento');
   renderArgomenti();
   scheduleSave();
 }
@@ -687,7 +761,7 @@ function renderVoti(){
   const tbody=document.getElementById('tbody-voti');
   const sid=document.getElementById('sel-studente-voti').value;
   const filtrati=sid?G().voti.filter(v=>v.sid===sid):G().voti;
-  if(!filtrati.length){tbody.innerHTML='<tr><td class="empty" colspan="6">Nessun voto registrato</td></tr>';return;}
+  if(!filtrati.length){tbody.innerHTML='<tr><td class="empty" colspan="7">Nessun voto registrato</td></tr>';return;}
   tbody.innerHTML=filtrati.map(v=>{
     const s=G().studenti.find(st=>st.id===v.sid);
     const col=v.val>=6?'#5DCAA5':v.val>=5?'#EF9F27':'#f09595';
@@ -697,6 +771,7 @@ function renderVoti(){
       <td>${v.materia}</td>
       <td><span style="font-weight:500;color:${col}">${v.val}</span></td>
       <td style="color:#666;font-size:12px">${v.note||'—'}</td>
+      <td><button class="btn" style="padding:3px 8px;font-size:11px" onclick="apriModificaVoto('${v.id}')">Modifica</button></td>
       <td><button class="btn danger" style="padding:3px 8px;font-size:11px" onclick="eliminaVoto('${v.id}')">Elimina</button></td>
     </tr>`;
   }).join('');
@@ -704,6 +779,38 @@ function renderVoti(){
 
 function eliminaVoto(id){
   db[gruppoCorrente].voti=G().voti.filter(v=>v.id!==id);
+  renderVoti();
+  scheduleSave();
+}
+
+function apriModificaVoto(id){
+  const v = G().voti.find(v => v.id === id);
+  if(!v) return;
+  // Popola select studenti
+  const sel = document.getElementById('m-mod-voto-studente');
+  sel.innerHTML = G().studenti.map(s=>`<option value="${s.id}">${s.nome}</option>`).join('');
+  // Precompila valori esistenti
+  document.getElementById('m-mod-voto-id').value       = v.id;
+  sel.value                                             = v.sid;
+  document.getElementById('m-mod-voto-data').value     = v.data;
+  document.getElementById('m-mod-voto-materia').value  = v.materia;
+  document.getElementById('m-mod-voto-val').value      = v.val;
+  document.getElementById('m-mod-voto-note').value     = v.note || '';
+  openModal('modal-modifica-voto');
+}
+
+function salvaModificaVoto(){
+  const id      = document.getElementById('m-mod-voto-id').value;
+  const sid     = document.getElementById('m-mod-voto-studente').value;
+  const data    = document.getElementById('m-mod-voto-data').value;
+  const materia = document.getElementById('m-mod-voto-materia').value.trim();
+  const val     = parseFloat(document.getElementById('m-mod-voto-val').value);
+  if(!id || !sid || !data || !materia || isNaN(val)) return;
+  const idx = G().voti.findIndex(v => v.id === id);
+  if(idx === -1) return;
+  G().voti[idx] = { id, sid, data, materia, val, note: document.getElementById('m-mod-voto-note').value.trim() };
+  G().voti.sort((a,b) => a.data.localeCompare(b.data));
+  closeModal('modal-modifica-voto');
   renderVoti();
   scheduleSave();
 }
