@@ -69,6 +69,21 @@ select option{background:#1a1a1a;color:#e8e6e0;}
 .info-box code{background:#1e1e1e;padding:2px 6px;border-radius:4px;color:#EF9F27;font-size:11px;}
 
 .app{position:relative;}
+.intro-screen{
+  min-height:100vh; display:flex; align-items:center; justify-content:center;
+  padding:24px;
+}
+.intro-card{
+  width:min(460px, 96vw); background:#141414; border:.5px solid #333;
+  border-radius:14px; padding:28px 24px; text-align:center;
+}
+.intro-title{font-size:26px;color:#e8e6e0;font-weight:600;margin-bottom:10px;}
+.intro-sub{font-size:14px;color:#999;line-height:1.6;margin-bottom:20px;}
+.btn-enter{
+  padding:10px 20px; font-size:14px; border-radius:10px;
+  border:.5px solid #e8e6e0; background:#e8e6e0; color:#111; cursor:pointer;
+}
+.btn-enter:hover{background:#fff;}
 .theme-toggle{
   position:absolute; top:14px; right:14px;
   width:36px; height:36px; border-radius:10px;
@@ -106,6 +121,11 @@ body.light-theme .modal h3{color:#1a1a1a;}
 body.light-theme .modal-bg{background:rgba(0,0,0,.45);}
 body.light-theme .theme-toggle{background:#fff;color:#1a1a1a;border-color:#cfcfcf;}
 body.light-theme .empty{color:#666;}
+body.light-theme .intro-card{background:#fff;border-color:#ddd;}
+body.light-theme .intro-title{color:#1a1a1a;}
+body.light-theme .intro-sub{color:#666;}
+body.light-theme .btn-enter{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
+body.light-theme .btn-enter:hover{background:#000;}
 
 /* Ensure readability for elements styled inline in JS templates */
 body.light-theme [style*="color:#e8e6e0"]{color:#1a1a1a !important;}
@@ -118,7 +138,16 @@ body.light-theme [style*="border:.5px solid #333"]{border:.5px solid #d6d6d6 !im
 </style>
 </head>
 <body>
-<div class="app">
+<div id="intro-screen" class="intro-screen">
+  <div class="intro-card">
+    <div class="mosque-name">Baytul Aman Monza</div>
+    <h1 class="intro-title">Registro Elettronico</h1>
+    <p class="intro-sub">Benvenuto. Premi il pulsante qui sotto per entrare nel registro.</p>
+    <button class="btn-enter" type="button" onclick="enterApp()">Entra</button>
+  </div>
+</div>
+
+<div class="app" id="app-main" style="display:none;">
 <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Cambia tema">☀️</button>
 
 <div class="mosque-name">Baytul Aman Monza</div>
@@ -397,6 +426,13 @@ function toggleTheme(){
   const next = document.body.classList.contains('light-theme') ? 'dark' : 'light';
   applyTheme(next);
   try{ localStorage.setItem(THEME_KEY, next); }catch(e){}
+}
+
+function enterApp(){
+  const intro = document.getElementById('intro-screen');
+  const app = document.getElementById('app-main');
+  if(intro) intro.style.display = 'none';
+  if(app) app.style.display = 'block';
 }
 
 // ─── DATABASE LOCALE ─────────────────────────────────────
