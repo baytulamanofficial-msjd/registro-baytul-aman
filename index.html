@@ -243,6 +243,7 @@ body.light-theme [style*="border:.5px solid #333"]{border:.5px solid #d6d6d6 !im
 
 <div class="tabs">
   <button class="tab active" onclick="switchTab('presenze')">Presenze</button>
+  <button class="tab" onclick="switchTab('note')">Note</button>
   <button class="tab" onclick="switchTab('argomenti')">Argomenti</button>
   <button class="tab" onclick="switchTab('voti')">Voti</button>
   <button class="tab" onclick="switchTab('riepilogo')">Riepilogo</button>
@@ -264,6 +265,17 @@ body.light-theme [style*="border:.5px solid #333"]{border:.5px solid #d6d6d6 !im
   </div>
   <div class="table-wrap">
     <table><thead id="thead-presenze"></thead><tbody id="tbody-presenze"></tbody></table>
+  </div>
+</div>
+
+<!-- ARGOMENTI -->
+<div id="tab-note" class="section">
+  <div class="top-bar">
+    <button class="btn" onclick="openModalNota()">+ Nota</button>
+  </div>
+  <div class="table-wrap">
+    <table><thead><tr><th>Data</th><th>Titolo</th><th>Nota</th><th></th></tr></thead>
+    <tbody id="tbody-note"></tbody></table>
   </div>
 </div>
 
@@ -418,6 +430,23 @@ body.light-theme [style*="border:.5px solid #333"]{border:.5px solid #d6d6d6 !im
   </div>
 </div>
 
+<!-- MODAL NOTA -->
+<div class="modal-bg" id="modal-nota">
+  <div class="modal">
+    <h3>Aggiungi nota</h3>
+    <label>Data</label>
+    <input type="date" id="m-nota-data">
+    <label>Titolo</label>
+    <input type="text" id="m-nota-titolo" placeholder="Es. Avviso, promemoria, osservazione">
+    <label>Testo</label>
+    <textarea id="m-nota-testo" placeholder="Scrivi qui la nota..."></textarea>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modal-nota')">Annulla</button>
+      <button class="btn primary" onclick="aggiungiNota()">Salva</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL VOTO -->
 <div class="modal-bg" id="modal-voto">
   <div class="modal">
@@ -512,14 +541,14 @@ function enterApp(){
 
 // ─── DATABASE LOCALE ─────────────────────────────────────
 const db = {
-  A: { studenti:[], presenze:{}, argomenti:[], voti:[] },
-  B: { studenti:[], presenze:{}, argomenti:[], voti:[] }
+  A: { studenti:[], presenze:{}, note:[], argomenti:[], voti:[] },
+  B: { studenti:[], presenze:{}, note:[], argomenti:[], voti:[] }
 };
 let gruppoCorrente = 'A';
 function G(){ return db[gruppoCorrente]; }
 
 // ─── DIRTY FLAG — ri-renderizza tab solo se i dati sono cambiati ─────
-const dirty = { presenze: true, argomenti: true, voti: true, riepilogo: true, gestisci: true };
+const dirty = { presenze: true, note: true, argomenti: true, voti: true, riepilogo: true, gestisci: true };
 function markDirty(sezione){ dirty[sezione] = true; }
 function markDirtyAll(){ Object.keys(dirty).forEach(k => dirty[k] = true); }
 function dirtyAll(){ markDirtyAll(); } // alias usato dopo loadFromSheets
@@ -705,17 +734,18 @@ function cambiaGruppo(){
 }
 
 function renderTabCorrente(){
-  const tabs=['presenze','argomenti','voti','riepilogo','gestisci'];
+  const tabs=['presenze','note','argomenti','voti','riepilogo','gestisci'];
   const idx=[...document.querySelectorAll('.tab')].findIndex(b=>b.classList.contains('active'));
   switchTab(tabs[idx]||'presenze');
 }
 
 function switchTab(t){
-  document.querySelectorAll('.tab').forEach((b,i)=>b.classList.toggle('active',['presenze','argomenti','voti','riepilogo','gestisci'][i]===t));
+  document.querySelectorAll('.tab').forEach((b,i)=>b.classList.toggle('active',['presenze','note','argomenti','voti','riepilogo','gestisci'][i]===t));
   document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
   document.getElementById('tab-'+t).classList.add('active');
   // Ri-renderizza SOLO se i dati sono cambiati dall'ultima visita
   if(t==='presenze'  && dirty.presenze)  { renderPresenze();  dirty.presenze  = false; }
+  if(t==='note'      && dirty.note)      { renderNote();      dirty.note      = false; }
   if(t==='argomenti' && dirty.argomenti) { renderArgomenti(); dirty.argomenti = false; }
   if(t==='voti'      && dirty.voti)      { renderVoti();      dirty.voti      = false; }
   if(t==='riepilogo' && dirty.riepilogo) { renderRiepilogo(); dirty.riepilogo = false; }
@@ -912,6 +942,45 @@ function cambiaStato(data,sid,val){
   G().presenze[data][sid]=val;
   markDirty('riepilogo');
   scheduleSave('presenze', gruppoCorrente);
+}
+
+// ─── NOTE ───────────────────────────────────────────
+function openModalNota(){
+  document.getElementById('m-nota-data').value = oggi();
+  document.getElementById('m-nota-titolo').value = '';
+  document.getElementById('m-nota-testo').value = '';
+  openModal('modal-nota');
+}
+
+function aggiungiNota(){
+  const data = document.getElementById('m-nota-data').value;
+  const titolo = document.getElementById('m-nota-titolo').value.trim();
+  const testo = document.getElementById('m-nota-testo').value.trim();
+  if(!data || !titolo) return;
+  G().note.push({ id:'n'+Date.now(), data, titolo, testo });
+  G().note.sort((a,b)=>b.data.localeCompare(a.data));
+  closeModal('modal-nota');
+  renderNote(); dirty.note = false;
+}
+
+function renderNote(){
+  const tbody = document.getElementById('tbody-note');
+  const elenco = [...G().note].sort((a,b)=>b.data.localeCompare(a.data));
+  if(!elenco.length){
+    tbody.innerHTML = '<tr><td class="empty" colspan="4">Nessuna nota inserita</td></tr>';
+    return;
+  }
+  tbody.innerHTML = elenco.map(n => `<tr>
+    <td>${fmtDisplay(n.data)} <span style="color:${COLORI_GG[getDow(n.data)]||'#666'};font-size:11px">${NOMI_GG[getDow(n.data)]}</span></td>
+    <td style="font-weight:500;color:#e8e6e0">${n.titolo}</td>
+    <td style="color:#666;font-size:12px">${n.testo||'—'}</td>
+    <td><button class="btn danger" style="padding:3px 8px;font-size:11px" onclick="eliminaNota('${n.id}')">Elimina</button></td>
+  </tr>`).join('');
+}
+
+function eliminaNota(id){
+  db[gruppoCorrente].note = G().note.filter(n => n.id !== id);
+  renderNote(); dirty.note = false;
 }
 
 // ─── ARGOMENTI ───────────────────────────────────────────
