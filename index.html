@@ -75,7 +75,7 @@ select option{background:#1a1a1a;color:#e8e6e0;}
   align-items:center;
   justify-content:center;
   padding:24px;
-  background: #121112;
+  background: linear-gradient(135deg, #0a1628 0%, #0d1f3c 50%, #0a1628 100%);
 }
 .intro-card{
   width:min(480px, 94vw);
@@ -204,6 +204,7 @@ body.light-theme [style*="background:#111"]{background:#f7f7f7 !important;}
 body.light-theme [style*="background:#1a1a1a"]{background:#ffffff !important;}
 body.light-theme [style*="border:.5px solid #333"]{border:.5px solid #d6d6d6 !important;}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
 <div id="intro-screen" class="intro-screen">
@@ -326,7 +327,7 @@ body.light-theme [style*="border:.5px solid #333"]{border:.5px solid #d6d6d6 !im
   </div>
   <div id="stats-generali" class="stats-grid"></div>
   <div class="table-wrap">
-    <table><thead><tr><th>Studente</th><th>Presenti</th><th>Assenti</th><th>Ritardi</th><th>% presenze</th><th>Media voti</th><th>Note</th></tr></thead>
+    <table><thead><tr><th>Studente</th><th>Presenti</th><th>Assenti</th><th>Ritardi</th><th>% presenze</th><th>Media voti</th><th>Note</th><th></th></tr></thead>
     <tbody id="tbody-riepilogo"></tbody></table>
   </div>
 </div>
@@ -604,14 +605,6 @@ async function loadFromSheets(gruppo) {
         note:    String(v.note    || '')
       }));
     }
-    if (data.note && data.note.length) {
-      db[gruppo].note = data.note.map(n => ({
-        id:    String(n.id    || ''),
-        data:  String(n.data  || '').substring(0, 10),
-        sid:   String(n.sid   || ''),
-        testo: String(n.testo || '')
-      }));
-    }
     setSyncStatus('ok', 'Sincronizzato — ' + new Date().toLocaleTimeString('it-IT'));
     // Invalida tutte le tab così al prossimo accesso si ri-renderizzano
     dirtyAll();
@@ -657,8 +650,7 @@ function scheduleSave(sezione, gruppo = gruppoCorrente) {
           studenti:  'saveStudenti',
           presenze:  'savePresenze',
           argomenti: 'saveArgomenti',
-          voti:      'saveVoti',
-          note:      'saveNote'
+          voti:      'saveVoti'
         };
         await gsFetch(actionMap[sezione], gruppo, g[sezione]);
       }
@@ -679,7 +671,6 @@ async function syncNow() {
     await gsFetch('savePresenze',  gruppoCorrente, g.presenze);
     await gsFetch('saveArgomenti', gruppoCorrente, g.argomenti);
     await gsFetch('saveVoti',      gruppoCorrente, g.voti);
-    await gsFetch('saveNote',      gruppoCorrente, g.note);
     setSyncStatus('ok', 'Salvato — ' + new Date().toLocaleTimeString('it-IT'));
   } catch(e) {
     setSyncStatus('error', 'Errore: ' + e.message);
@@ -975,10 +966,7 @@ function aggiungiNota(){
   closeModal('modal-nota');
   markDirty('riepilogo');
   renderNote(); dirty.note = false;
-  scheduleSave('note', gruppoCorrente);
 }
-
-// ─── ARGOMENTI
 
 function renderNote(){
   const tbody = document.getElementById('tbody-note');
@@ -999,7 +987,6 @@ function eliminaNota(id){
   db[gruppoCorrente].note = G().note.filter(n => n.id !== id);
   markDirty('riepilogo');
   renderNote(); dirty.note = false;
-  scheduleSave('note', gruppoCorrente);
 }
 
 // ─── ARGOMENTI ───────────────────────────────────────────
@@ -1197,8 +1184,290 @@ function renderRiepilogo(){
       <td><div style="display:flex;align-items:center;gap:8px;"><div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${col}"></div></div><span style="font-size:12px;color:${col};font-weight:500;min-width:36px">${pct}%</span></div></td>
       <td>${media==='—'?'<span style="color:#555">—</span>':`<span style="font-weight:500;color:${parseFloat(media)>=6?'#5DCAA5':parseFloat(media)>=5?'#EF9F27':'#f09595'}">${media}</span>`}</td>
       <td><span style="font-weight:500;color:#e8e6e0">${noteCount}</span></td>
+      <td><button class="btn" style="padding:3px 10px;font-size:11px" onclick="apriModalPDF('${s.id}')">↓ PDF</button></td>
     </tr>`;
   }).join('');
+}
+
+// ─── PDF PAGELLA ─────────────────────────────────────────
+let _pdfStudenteId = null;
+
+function apriModalPDF(sid) {
+  _pdfStudenteId = sid;
+  const ac = new Date().getFullYear();
+  // Popola anni
+  ['pdf-anno-da','pdf-anno-a','pdf-singolo-anno'].forEach(id => {
+    const sel = document.getElementById(id);
+    sel.innerHTML = '';
+    for(let i=ac-4; i<=ac; i++){
+      const o = document.createElement('option');
+      o.value = i; o.textContent = i;
+      if(i===ac) o.selected = true;
+      sel.appendChild(o);
+    }
+  });
+  // Mese corrente
+  const mc = new Date().getMonth();
+  document.getElementById('pdf-mese-da').value = mc;
+  document.getElementById('pdf-mese-a').value  = mc;
+  document.getElementById('pdf-singolo-mese').checked = true;
+  aggiornaModoPDF();
+  openModal('modal-pdf-periodo');
+}
+
+function aggiornaModoPDF() {
+  const singolo = document.getElementById('pdf-singolo-mese').checked;
+  document.getElementById('pdf-range-section').style.display = singolo ? 'none' : 'block';
+  document.getElementById('pdf-singolo-section').style.display = singolo ? 'block' : 'none';
+}
+
+function generaPDF() {
+  const sid = _pdfStudenteId;
+  const studente = G().studenti.find(s => s.id === sid);
+  if(!studente) return;
+
+  const singolo = document.getElementById('pdf-singolo-mese').checked;
+  let periodi = []; // array di {anno, mese}
+
+  if(singolo) {
+    const anno = parseInt(document.getElementById('pdf-singolo-anno').value);
+    const mese = parseInt(document.getElementById('pdf-singolo-mese-val').value);
+    periodi = [{anno, mese}];
+  } else {
+    const annoDa = parseInt(document.getElementById('pdf-anno-da').value);
+    const meseDa = parseInt(document.getElementById('pdf-mese-da').value);
+    const annoA  = parseInt(document.getElementById('pdf-anno-a').value);
+    const meseA  = parseInt(document.getElementById('pdf-mese-a').value);
+    let ac = annoDa, mc = meseDa;
+    while(ac < annoA || (ac === annoA && mc <= meseA)) {
+      periodi.push({anno: ac, mese: mc});
+      mc++; if(mc > 11){ mc = 0; ac++; }
+      if(periodi.length > 24) break; // max 2 anni
+    }
+  }
+
+  closeModal('modal-pdf-periodo');
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const W = 210, M = 15;
+  let y = 15;
+
+  const colori = { verde: [93,202,165], arancio:[239,159,39], rosso:[240,149,149], grigio:[80,80,80], testo:[30,30,30], sfondo:[245,246,248] };
+
+  // ── INTESTAZIONE ──────────────────────────────────────
+  doc.setFillColor(10, 22, 40);
+  doc.rect(0, 0, W, 32, 'F');
+  doc.setTextColor(200, 218, 245);
+  doc.setFontSize(8);
+  doc.setFont('helvetica','bold');
+  doc.text('BAYTUL AMAN MONZA', M, 11);
+  doc.setTextColor(255,255,255);
+  doc.setFontSize(16);
+  doc.text('Registro Elettronico', M, 20);
+  doc.setFontSize(9);
+  doc.setTextColor(180, 200, 230);
+  doc.text(`Gruppo ${gruppoCorrente}`, M, 27);
+
+  // Periodo in alto a destra
+  const periodoLabel = singolo
+    ? `${MESI_NOMI[periodi[0].mese]} ${periodi[0].anno}`
+    : `${MESI_NOMI[periodi[0].mese]} ${periodi[0].anno} — ${MESI_NOMI[periodi[periodi.length-1].mese]} ${periodi[periodi.length-1].anno}`;
+  doc.setFontSize(8);
+  doc.setTextColor(160,185,220);
+  doc.text(periodoLabel, W - M, 20, {align:'right'});
+
+  y = 40;
+
+  // ── NOME STUDENTE ─────────────────────────────────────
+  doc.setFillColor(...colori.sfondo);
+  doc.roundedRect(M, y, W-M*2, 12, 2, 2, 'F');
+  doc.setTextColor(...colori.testo);
+  doc.setFontSize(13);
+  doc.setFont('helvetica','bold');
+  doc.text(studente.nome, M+5, y+8);
+  y += 18;
+
+  // ── LOOP PER OGNI MESE ────────────────────────────────
+  periodi.forEach(({anno, mese}) => {
+    const date = getDateLezione(anno, mese);
+    const oggi_ = oggi();
+    const datePassate = date.filter(d => d <= oggi_);
+    let p=0,a=0,r=0;
+    datePassate.forEach(d => {
+      const st = G().presenze[d]?.[sid] || 'P';
+      if(st==='P') p++; else if(st==='A') a++; else r++;
+    });
+    const tot = datePassate.length;
+    const pct = tot ? Math.round((p/tot)*100) : 0;
+    const votiMese = G().voti.filter(v => {
+      const dv = new Date(v.data+'T12:00:00');
+      return v.sid===sid && dv.getFullYear()===anno && dv.getMonth()===mese;
+    });
+    const argMese = G().argomenti.filter(a => {
+      const da = new Date(a.data+'T12:00:00');
+      return da.getFullYear()===anno && da.getMonth()===mese;
+    });
+    const noteMese = G().note.filter(n => {
+      const dn = new Date(n.data+'T12:00:00');
+      return n.sid===sid && dn.getFullYear()===anno && dn.getMonth()===mese;
+    });
+
+    // Controlla spazio pagina
+    if(y > 240) { doc.addPage(); y = 15; }
+
+    // Titolo mese
+    doc.setFillColor(26, 58, 110);
+    doc.rect(M, y, W-M*2, 8, 'F');
+    doc.setTextColor(200, 218, 245);
+    doc.setFontSize(9);
+    doc.setFont('helvetica','bold');
+    doc.text(`${MESI_NOMI[mese].toUpperCase()} ${anno}`, M+4, y+5.5);
+    y += 12;
+
+    // Presenze
+    doc.setTextColor(...colori.grigio);
+    doc.setFontSize(7.5);
+    doc.setFont('helvetica','bold');
+    doc.text('PRESENZE', M, y);
+    y += 4;
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(9);
+    doc.setTextColor(...colori.testo);
+
+    const pctCol = pct>=90 ? colori.verde : pct>=75 ? colori.arancio : colori.rosso;
+    doc.text(`Lezioni: ${tot}   Presenti: ${p}   Assenti: ${a}   Ritardi: ${r}`, M, y);
+    doc.setTextColor(...pctCol);
+    doc.setFont('helvetica','bold');
+    doc.text(`${pct}%`, W-M, y, {align:'right'});
+    doc.setFont('helvetica','normal');
+    doc.setTextColor(...colori.testo);
+    y += 6;
+
+    // Barra progresso presenze
+    doc.setFillColor(220,220,220);
+    doc.roundedRect(M, y, W-M*2, 2.5, 1, 1, 'F');
+    doc.setFillColor(...pctCol);
+    doc.roundedRect(M, y, (W-M*2)*(pct/100), 2.5, 1, 1, 'F');
+    y += 7;
+
+    // Voti
+    if(votiMese.length) {
+      if(y > 250) { doc.addPage(); y = 15; }
+      doc.setTextColor(...colori.grigio);
+      doc.setFontSize(7.5);
+      doc.setFont('helvetica','bold');
+      doc.text('VOTI', M, y);
+      y += 4;
+      doc.setFontSize(8.5);
+      doc.setFont('helvetica','normal');
+      votiMese.forEach(v => {
+        if(y > 270) { doc.addPage(); y = 15; }
+        const vCol = v.val>=6 ? colori.verde : v.val>=5 ? colori.arancio : colori.rosso;
+        doc.setTextColor(...colori.testo);
+        const dataStr = v.data.split('-').reverse().slice(0,2).join('/');
+        doc.text(`${dataStr}  ${v.materia}`, M+2, y);
+        doc.setTextColor(...vCol);
+        doc.setFont('helvetica','bold');
+        doc.text(`${v.val}`, W-M, y, {align:'right'});
+        doc.setFont('helvetica','normal');
+        if(v.note) {
+          doc.setTextColor(140,140,140);
+          doc.setFontSize(7.5);
+          doc.text(`↳ ${v.note}`, M+4, y+3.5);
+          y += 3.5;
+          doc.setFontSize(8.5);
+        }
+        y += 5;
+      });
+      const media = (votiMese.reduce((acc,v)=>acc+v.val,0)/votiMese.length).toFixed(1);
+      const mCol = parseFloat(media)>=6?colori.verde:parseFloat(media)>=5?colori.arancio:colori.rosso;
+      doc.setFillColor(240,242,245);
+      doc.rect(M, y-1, W-M*2, 7, 'F');
+      doc.setTextColor(80,80,80);
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(8.5);
+      doc.text('Media voti:', M+3, y+4);
+      doc.setTextColor(...mCol);
+      doc.text(media, W-M, y+4, {align:'right'});
+      doc.setFont('helvetica','normal');
+      y += 10;
+    }
+
+    // Argomenti
+    if(argMese.length) {
+      if(y > 250) { doc.addPage(); y = 15; }
+      doc.setTextColor(...colori.grigio);
+      doc.setFontSize(7.5);
+      doc.setFont('helvetica','bold');
+      doc.text('ARGOMENTI SVOLTI', M, y);
+      y += 4;
+      doc.setFontSize(8.5);
+      doc.setFont('helvetica','normal');
+      doc.setTextColor(...colori.testo);
+      argMese.forEach(a => {
+        if(y > 270) { doc.addPage(); y = 15; }
+        const dataStr = a.data.split('-').reverse().slice(0,2).join('/');
+        doc.text(`${dataStr}  ${a.titolo}`, M+2, y);
+        if(a.note) {
+          doc.setTextColor(140,140,140);
+          doc.setFontSize(7.5);
+          doc.text(`↳ ${a.note}`, M+4, y+3.5);
+          y += 3.5;
+          doc.setFontSize(8.5);
+          doc.setTextColor(...colori.testo);
+        }
+        y += 5;
+      });
+      y += 2;
+    }
+
+    // Note
+    if(noteMese.length) {
+      if(y > 250) { doc.addPage(); y = 15; }
+      doc.setTextColor(...colori.grigio);
+      doc.setFontSize(7.5);
+      doc.setFont('helvetica','bold');
+      doc.text('NOTE', M, y);
+      y += 4;
+      doc.setFontSize(8.5);
+      doc.setFont('helvetica','normal');
+      doc.setTextColor(...colori.testo);
+      noteMese.forEach(n => {
+        if(y > 270) { doc.addPage(); y = 15; }
+        const dataStr = n.data.split('-').reverse().slice(0,2).join('/');
+        const testo = n.testo || '—';
+        const righe = doc.splitTextToSize(`${dataStr}  ${testo}`, W-M*2-4);
+        doc.text(righe, M+2, y);
+        y += righe.length * 4.5 + 1;
+      });
+      y += 2;
+    }
+
+    // Separatore tra mesi
+    if(periodi.length > 1) {
+      doc.setDrawColor(220,220,220);
+      doc.line(M, y, W-M, y);
+      y += 6;
+    }
+  });
+
+  // ── FOOTER ───────────────────────────────────────────
+  const pages = doc.getNumberOfPages();
+  for(let i=1; i<=pages; i++){
+    doc.setPage(i);
+    doc.setFillColor(240,242,245);
+    doc.rect(0, 287, W, 10, 'F');
+    doc.setFontSize(7);
+    doc.setTextColor(150,150,150);
+    doc.setFont('helvetica','normal');
+    doc.text('Baytul Aman Monza — Registro Elettronico', M, 293);
+    doc.text(`Pag. ${i} / ${pages}`, W-M, 293, {align:'right'});
+    doc.text(new Date().toLocaleDateString('it-IT'), W/2, 293, {align:'center'});
+  }
+
+  const nomefile = `Pagella_${studente.nome.replace(/\s+/g,'_')}_${periodoLabel.replace(/\s+/g,'_')}.pdf`;
+  doc.save(nomefile);
 }
 
 // ─── INIT ────────────────────────────────────────────────
@@ -1227,5 +1496,75 @@ if(SCRIPT_URL){
   renderPresenze();
 }
 </script>
+<!-- MODAL PDF PERIODO -->
+<div class="modal-bg" id="modal-pdf-periodo">
+  <div class="modal" style="width:400px;">
+    <h3>Scarica pagella PDF</h3>
+
+    <div style="display:flex;gap:8px;margin-top:12px;margin-bottom:16px;">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:#e8e6e0;">
+        <input type="radio" name="pdf-modo" id="pdf-singolo-mese" value="singolo" onchange="aggiornaModoPDF()" style="width:auto;margin:0;">
+        Mese singolo
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:#e8e6e0;margin-left:16px;">
+        <input type="radio" name="pdf-modo" id="pdf-intervallo" value="intervallo" onchange="aggiornaModoPDF()" style="width:auto;margin:0;">
+        Intervallo di mesi
+      </label>
+    </div>
+
+    <!-- Singolo mese -->
+    <div id="pdf-singolo-section">
+      <label>Anno</label>
+      <select id="pdf-singolo-anno"></select>
+      <label>Mese</label>
+      <select id="pdf-singolo-mese-val">
+        <option value="0">Gennaio</option><option value="1">Febbraio</option>
+        <option value="2">Marzo</option><option value="3">Aprile</option>
+        <option value="4">Maggio</option><option value="5">Giugno</option>
+        <option value="6">Luglio</option><option value="7">Agosto</option>
+        <option value="8">Settembre</option><option value="9">Ottobre</option>
+        <option value="10">Novembre</option><option value="11">Dicembre</option>
+      </select>
+    </div>
+
+    <!-- Intervallo -->
+    <div id="pdf-range-section" style="display:none;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div>
+          <label>Da — Anno</label>
+          <select id="pdf-anno-da"></select>
+          <label style="margin-top:8px;">Da — Mese</label>
+          <select id="pdf-mese-da">
+            <option value="0">Gennaio</option><option value="1">Febbraio</option>
+            <option value="2">Marzo</option><option value="3">Aprile</option>
+            <option value="4">Maggio</option><option value="5">Giugno</option>
+            <option value="6">Luglio</option><option value="7">Agosto</option>
+            <option value="8">Settembre</option><option value="9">Ottobre</option>
+            <option value="10">Novembre</option><option value="11">Dicembre</option>
+          </select>
+        </div>
+        <div>
+          <label>A — Anno</label>
+          <select id="pdf-anno-a"></select>
+          <label style="margin-top:8px;">A — Mese</label>
+          <select id="pdf-mese-a">
+            <option value="0">Gennaio</option><option value="1">Febbraio</option>
+            <option value="2">Marzo</option><option value="3">Aprile</option>
+            <option value="4">Maggio</option><option value="5">Giugno</option>
+            <option value="6">Luglio</option><option value="7">Agosto</option>
+            <option value="8">Settembre</option><option value="9">Ottobre</option>
+            <option value="10">Novembre</option><option value="11">Dicembre</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-actions" style="margin-top:1.25rem;">
+      <button class="btn" onclick="closeModal('modal-pdf-periodo')">Annulla</button>
+      <button class="btn primary" onclick="generaPDF()">↓ Genera PDF</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
