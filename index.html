@@ -263,6 +263,7 @@ body.light-theme [style*="border:.5px solid #333"]{border:.5px solid #d6d6d6 !im
       <option value="8">Settembre</option><option value="9">Ottobre</option>
       <option value="10">Novembre</option><option value="11">Dicembre</option>
     </select>
+    <button class="btn" id="btn-summertime" onclick="toggleSummertime()" style="font-size:12px;padding:6px 12px;">☀ Attiva Summertime</button>
   </div>
   <div class="table-wrap">
     <table><thead id="thead-presenze"></thead><tbody id="tbody-presenze"></tbody></table>
@@ -542,8 +543,8 @@ function enterApp(){
 
 // ─── DATABASE LOCALE ─────────────────────────────────────
 const db = {
-  A: { studenti:[], presenze:{}, note:[], argomenti:[], voti:[] },
-  B: { studenti:[], presenze:{}, note:[], argomenti:[], voti:[] }
+  A: { studenti:[], presenze:{}, note:[], argomenti:[], voti:[], summertime:[] },
+  B: { studenti:[], presenze:{}, note:[], argomenti:[], voti:[], summertime:[] }
 };
 let gruppoCorrente = 'A';
 function G(){ return db[gruppoCorrente]; }
@@ -555,7 +556,7 @@ function markDirtyAll(){ Object.keys(dirty).forEach(k => dirty[k] = true); }
 function dirtyAll(){ markDirtyAll(); } // alias usato dopo loadFromSheets
 
 // ─── GOOGLE SHEETS CONFIG ────────────────────────────────
-let SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxRDT_Zljb_kK9IJkOOigM5PVD_6Yfuzj9vH0P9WdK0MtNaztP3g32XWg8ULGj6tVe9/exec";
+let SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzUfFrW_kCVQT4Rm4vFiEJksmMCXbDxay5gLpcJdEJcmhtDWmO0XFqrGxDHWKNttPIM/exec";
 
 function setSyncStatus(stato, msg) {
   const dot = document.getElementById('sync-dot');
@@ -605,6 +606,19 @@ async function loadFromSheets(gruppo) {
         note:    String(v.note    || '')
       }));
     }
+    if (data.note && data.note.length) {
+      db[gruppo].note = data.note.map(n => ({
+        id:    String(n.id    || ''),
+        data:  String(n.data  || '').substring(0, 10),
+        sid:   String(n.sid   || ''),
+        testo: String(n.testo || '')
+      }));
+    }
+    if (data.summertime) {
+      db[gruppo].summertime = Array.isArray(data.summertime)
+        ? data.summertime.map(k => String(k)).filter(Boolean)
+        : [];
+    }
     setSyncStatus('ok', 'Sincronizzato — ' + new Date().toLocaleTimeString('it-IT'));
     // Invalida tutte le tab così al prossimo accesso si ri-renderizzano
     dirtyAll();
@@ -647,10 +661,12 @@ function scheduleSave(sezione, gruppo = gruppoCorrente) {
         await gsFetch('saveVoti',      gruppo, g.voti);
       } else {
         const actionMap = {
-          studenti:  'saveStudenti',
-          presenze:  'savePresenze',
-          argomenti: 'saveArgomenti',
-          voti:      'saveVoti'
+          studenti:   'saveStudenti',
+          presenze:   'savePresenze',
+          argomenti:  'saveArgomenti',
+          voti:       'saveVoti',
+          note:       'saveNote',
+          summertime: 'saveSummertime'
         };
         await gsFetch(actionMap[sezione], gruppo, g[sezione]);
       }
@@ -662,15 +678,16 @@ function scheduleSave(sezione, gruppo = gruppoCorrente) {
 }
 
 async function syncNow() {
-  // Cancella tutti i timer pendenti e salva tutto subito
   Object.keys(saveTimers).forEach(k => clearTimeout(saveTimers[k]));
   setSyncStatus('loading', 'Salvataggio completo...');
   try {
     const g = db[gruppoCorrente];
-    await gsFetch('saveStudenti',  gruppoCorrente, g.studenti);
-    await gsFetch('savePresenze',  gruppoCorrente, g.presenze);
-    await gsFetch('saveArgomenti', gruppoCorrente, g.argomenti);
-    await gsFetch('saveVoti',      gruppoCorrente, g.voti);
+    await gsFetch('saveStudenti',   gruppoCorrente, g.studenti);
+    await gsFetch('savePresenze',   gruppoCorrente, g.presenze);
+    await gsFetch('saveArgomenti',  gruppoCorrente, g.argomenti);
+    await gsFetch('saveVoti',       gruppoCorrente, g.voti);
+    await gsFetch('saveNote',       gruppoCorrente, g.note);
+    await gsFetch('saveSummertime', gruppoCorrente, g.summertime);
     setSyncStatus('ok', 'Salvato — ' + new Date().toLocaleTimeString('it-IT'));
   } catch(e) {
     setSyncStatus('error', 'Errore: ' + e.message);
@@ -678,12 +695,46 @@ async function syncNow() {
 }
 
 // ─── UTILITY ─────────────────────────────────────────────
+// ─── SUMMERTIME ──────────────────────────────────────────
+// summertime è un array di stringhe "YYYY-MM" per ogni mese attivato
+function getSummertimeKey(anno, mese) {
+  return `${anno}-${String(mese+1).padStart(2,'0')}`;
+}
+function isSummertime(anno, mese) {
+  const key = getSummertimeKey(anno, mese);
+  return G().summertime.includes(key);
+}
+function toggleSummertime() {
+  const anno = parseInt(document.getElementById('sel-anno').value);
+  const mese = parseInt(document.getElementById('sel-mese').value);
+  const key  = getSummertimeKey(anno, mese);
+  if(isSummertime(anno, mese)) {
+    G().summertime = G().summertime.filter(k => k !== key);
+  } else {
+    G().summertime.push(key);
+  }
+  markDirty('presenze'); markDirty('riepilogo');
+  renderPresenze(); dirty.presenze = false;
+  scheduleSave('summertime', gruppoCorrente);
+}
+function aggiornaBtnSummertime(anno, mese) {
+  const btn = document.getElementById('btn-summertime');
+  if(!btn) return;
+  const attivo = isSummertime(anno, mese);
+  btn.textContent = attivo ? '☀ Disattiva Summertime' : '☀ Attiva Summertime';
+  btn.style.color     = attivo ? '#EF9F27' : '';
+  btn.style.borderColor = attivo ? '#6a4a1a' : '';
+  btn.style.background  = attivo ? '#1e1400' : '';
+}
+
 function getDateLezione(anno, mese) {
   const date = [];
   const giorni = new Date(anno, mese+1, 0).getDate();
+  const summer = isSummertime(anno, mese);
   for(let g=1; g<=giorni; g++){
     const d = new Date(anno, mese, g, 12);
-    if(GIORNI_LEZIONE.includes(d.getDay())) date.push(fmt(d));
+    // In summertime: tutti i giorni. Normale: solo sab/dom/lun/mar
+    if(summer || GIORNI_LEZIONE.includes(d.getDay())) date.push(fmt(d));
   }
   return date;
 }
@@ -906,6 +957,8 @@ function aggiornaSelezioniStudenti(){
 function renderPresenze(){
   const anno=parseInt(document.getElementById('sel-anno').value);
   const mese=parseInt(document.getElementById('sel-mese').value);
+  aggiornaBtnSummertime(anno, mese);
+  const summer = isSummertime(anno, mese);
   const date=getDateLezione(anno,mese);
   // initPresenze solo sulle date passate/oggi — non toccare le future
   const oggi_ = oggi();
@@ -925,14 +978,16 @@ function renderPresenze(){
   tbody.innerHTML=G().studenti.map(s=>{
     const celle=date.map(d=>{
       const isFutura = d > oggi_;
-      // Cella futura: nera vuota, non cliccabile
       if(isFutura) return`<td style="background:#0a0a0a;"></td>`;
       const stato=G().presenze[d]?.[s.id]||'P';
-      const col=stato==='P'?'#5DCAA5':stato==='A'?'#f09595':'#EF9F27';
-      return`<td><select onchange="cambiaStato('${d}','${s.id}',this.value);this.style.color=this.value==='P'?'#5DCAA5':this.value==='A'?'#f09595':'#EF9F27'" style="font-size:12px;border:none;background:none;color:${col};font-weight:500;cursor:pointer;padding:2px 4px;">
+      const col=stato==='P'?'#5DCAA5':stato==='A'?'#f09595':stato==='R'?'#EF9F27':'#555';
+      // Colore aggiornato inline al cambio
+      const onchangeColor = `this.style.color=this.value==='P'?'#5DCAA5':this.value==='A'?'#f09595':this.value==='R'?'#EF9F27':'#555'`;
+      return`<td><select onchange="cambiaStato('${d}','${s.id}',this.value);${onchangeColor}" style="font-size:12px;border:none;background:none;color:${col};font-weight:500;cursor:pointer;padding:2px 4px;">
         <option value="P" ${stato==='P'?'selected':''}>P</option>
         <option value="A" ${stato==='A'?'selected':''}>A</option>
         <option value="R" ${stato==='R'?'selected':''}>R</option>
+        ${summer?`<option value="N" ${stato==='N'?'selected':''}>N</option>`:''}
       </select></td>`;
     }).join('');
     return`<tr><td style="font-weight:500;color:#e8e6e0;min-width:140px">${s.nome}</td>${celle}</tr>`;
@@ -1172,15 +1227,16 @@ function renderRiepilogo(){
   if(!G().studenti.length||!totLezioni){tbody.innerHTML='<tr><td class="empty" colspan="7">Nessun dato disponibile</td></tr>';return;}
   tbody.innerHTML=G().studenti.map(s=>{
     let p=0,a=0,r=0;
-    date.forEach(d=>{const st=G().presenze[d]?.[s.id]||'P';if(st==='P')p++;else if(st==='A')a++;else r++;});
-    const pct=totLezioni?Math.round((p/totLezioni)*100):0;
+    date.forEach(d=>{const st=G().presenze[d]?.[s.id]||'P';if(st==='N') return; if(st==='P')p++;else if(st==='A')a++;else r++;});
+    const totEff = p+a+r; // totale effettivo escludendo N
+    const pct=totEff?Math.round((p/totEff)*100):0;
     const col=pct>=90?'#5DCAA5':pct>=75?'#EF9F27':'#f09595';
     const sv=G().voti.filter(v=>{const d=new Date(v.data+'T12:00:00');return v.sid===s.id&&d.getFullYear()===anno&&d.getMonth()===mese;});
     const media=sv.length?(sv.reduce((acc,v)=>acc+v.val,0)/sv.length).toFixed(1):'—';
     const noteCount=G().note.filter(n=>n.sid===s.id).length;
     return`<tr>
       <td style="font-weight:500;color:#e8e6e0">${s.nome}</td>
-      <td>${p} / ${totLezioni}</td><td>${a}</td><td>${r}</td>
+      <td>${p} / ${totEff}</td><td>${a}</td><td>${r}</td>
       <td><div style="display:flex;align-items:center;gap:8px;"><div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${col}"></div></div><span style="font-size:12px;color:${col};font-weight:500;min-width:36px">${pct}%</span></div></td>
       <td>${media==='—'?'<span style="color:#555">—</span>':`<span style="font-weight:500;color:${parseFloat(media)>=6?'#5DCAA5':parseFloat(media)>=5?'#EF9F27':'#f09595'}">${media}</span>`}</td>
       <td><span style="font-weight:500;color:#e8e6e0">${noteCount}</span></td>
