@@ -616,7 +616,11 @@ async function loadFromSheets(gruppo) {
     }
     if (data.summertime) {
       db[gruppo].summertime = Array.isArray(data.summertime)
-        ? data.summertime.map(k => String(k)).filter(Boolean)
+        ? data.summertime.map(k => {
+            // readSheet restituisce oggetti {chiave:"2026-06"}, readSummertimeSheet stringhe dirette
+            if (typeof k === 'object' && k !== null) return String(k.chiave || '');
+            return String(k);
+          }).filter(k => k && k !== 'undefined' && k !== '[object Object]')
         : [];
     }
     setSyncStatus('ok', 'Sincronizzato — ' + new Date().toLocaleTimeString('it-IT'));
