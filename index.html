@@ -556,7 +556,7 @@ function markDirtyAll(){ Object.keys(dirty).forEach(k => dirty[k] = true); }
 function dirtyAll(){ markDirtyAll(); } // alias usato dopo loadFromSheets
 
 // ─── GOOGLE SHEETS CONFIG ────────────────────────────────
-let SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzUfFrW_kCVQT4Rm4vFiEJksmMCXbDxay5gLpcJdEJcmhtDWmO0XFqrGxDHWKNttPIM/exec";
+let SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwUtlTVTvbpYXvbhtFMcyZAvKm7xzFNj-3_pID7bqiEeTZacClpVLmViJXigxAmu00/exec";
 
 function setSyncStatus(stato, msg) {
   const dot = document.getElementById('sync-dot');
@@ -617,10 +617,12 @@ async function loadFromSheets(gruppo) {
     if (data.summertime) {
       db[gruppo].summertime = Array.isArray(data.summertime)
         ? data.summertime.map(k => {
-            // readSheet restituisce oggetti {chiave:"2026-06"}, readSummertimeSheet stringhe dirette
-            if (typeof k === 'object' && k !== null) return String(k.chiave || '');
-            return String(k);
-          }).filter(k => k && k !== 'undefined' && k !== '[object Object]')
+            if (typeof k === 'object' && k !== null) {
+              k = k.chiave || k.key || Object.values(k)[0] || '';
+            }
+            const s = String(k).trim().substring(0, 7);
+            return /^\d{4}-\d{2}$/.test(s) ? s : null;
+          }).filter(Boolean)
         : [];
     }
     setSyncStatus('ok', 'Sincronizzato — ' + new Date().toLocaleTimeString('it-IT'));
