@@ -211,15 +211,29 @@ body.light-theme [style*="border:.5px solid #333"]{border:.5px solid #d6d6d6 !im
   <div class="intro-card">
     <div class="intro-mosque">Baytul Aman Monza</div>
     <h1 class="intro-title">Registro Elettronico</h1>
-    <p class="intro-sub">Gestione presenze, argomenti e valutazioni per le classi della moschea.</p>
+    <p class="intro-sub">Inserisci la password per accedere.</p>
     <div class="intro-divider"></div>
-    <div class="intro-features">
-      <div class="intro-chip">Presenze</div>
-      <div class="intro-chip">Argomenti</div>
-      <div class="intro-chip">Voti</div>
-      <div class="intro-chip">Riepilogo</div>
+
+    <div style="text-align:left;margin-bottom:20px;">
+      <label style="font-size:12px;color:#555;display:block;margin-bottom:6px;letter-spacing:.06em;text-transform:uppercase;">Password</label>
+      <div style="position:relative;">
+        <input
+          type="password"
+          id="login-password"
+          placeholder="••••••••"
+          onkeydown="if(event.key==='Enter') eseguiLogin()"
+          style="width:100%;font-size:14px;padding:11px 44px 11px 14px;border-radius:8px;border:.5px solid #333;background:#111;color:#e8e6e0;outline:none;letter-spacing:.1em;"
+        >
+        <button
+          onclick="togglePasswordVis()"
+          type="button"
+          style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:#555;cursor:pointer;font-size:15px;padding:0;"
+          id="btn-show-pw">👁</button>
+      </div>
+      <div id="login-errore" style="font-size:12px;color:#f09595;margin-top:8px;min-height:16px;"></div>
     </div>
-    <button class="btn-enter" type="button" onclick="enterApp()">Accedi al registro</button>
+
+    <button class="btn-enter" type="button" id="btn-login" onclick="eseguiLogin()">Accedi</button>
   </div>
 </div>
 
@@ -534,11 +548,55 @@ function toggleTheme(){
   try{ localStorage.setItem(THEME_KEY, next); }catch(e){}
 }
 
+function togglePasswordVis(){
+  const input = document.getElementById('login-password');
+  const btn   = document.getElementById('btn-show-pw');
+  if(input.type === 'password'){
+    input.type = 'text';
+    btn.textContent = '🙈';
+  } else {
+    input.type = 'password';
+    btn.textContent = '👁';
+  }
+}
+
+async function eseguiLogin(){
+  const pw    = document.getElementById('login-password').value;
+  const err   = document.getElementById('login-errore');
+  const btn   = document.getElementById('btn-login');
+  if(!pw){ err.textContent = 'Inserisci la password.'; return; }
+  err.textContent = '';
+  btn.textContent = 'Verifica...';
+  btn.disabled = true;
+  try {
+    const res  = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'checkPassword', data: pw })
+    });
+    const json = await res.json();
+    if(json.ok){
+      // Salva in sessionStorage così il reload non richiede la password di nuovo
+      try{ sessionStorage.setItem('registro_auth', '1'); }catch(e){}
+      enterApp();
+    } else {
+      err.textContent = 'Password errata. Riprova.';
+      document.getElementById('login-password').value = '';
+      document.getElementById('login-password').focus();
+    }
+  } catch(e) {
+    err.textContent = 'Errore di connessione. Riprova.';
+  } finally {
+    btn.textContent = 'Accedi';
+    btn.disabled = false;
+  }
+}
+
 function enterApp(){
   const intro = document.getElementById('intro-screen');
-  const app = document.getElementById('app-main');
+  const app   = document.getElementById('app-main');
   if(intro) intro.style.display = 'none';
-  if(app) app.style.display = 'block';
+  if(app)   app.style.display   = 'block';
 }
 
 // ─── DATABASE LOCALE ─────────────────────────────────────
@@ -556,7 +614,7 @@ function markDirtyAll(){ Object.keys(dirty).forEach(k => dirty[k] = true); }
 function dirtyAll(){ markDirtyAll(); } // alias usato dopo loadFromSheets
 
 // ─── GOOGLE SHEETS CONFIG ────────────────────────────────
-let SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwUtlTVTvbpYXvbhtFMcyZAvKm7xzFNj-3_pID7bqiEeTZacClpVLmViJXigxAmu00/exec";
+let SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwhJ8db3cHgVpdSl9OalO_5uwqrDkXpkQrXff9MJt5yGIX9ZK-wnFJxUrcvKbwpUoDZ/exec";
 
 function setSyncStatus(stato, msg) {
   const dot = document.getElementById('sync-dot');
@@ -616,13 +674,7 @@ async function loadFromSheets(gruppo) {
     }
     if (data.summertime) {
       db[gruppo].summertime = Array.isArray(data.summertime)
-        ? data.summertime.map(k => {
-            if (typeof k === 'object' && k !== null) {
-              k = k.chiave || k.key || Object.values(k)[0] || '';
-            }
-            const s = String(k).trim().substring(0, 7);
-            return /^\d{4}-\d{2}$/.test(s) ? s : null;
-          }).filter(Boolean)
+        ? data.summertime.map(k => String(k)).filter(Boolean)
         : [];
     }
     setSyncStatus('ok', 'Sincronizzato — ' + new Date().toLocaleTimeString('it-IT'));
@@ -1546,6 +1598,11 @@ aggiornaSelezioniStudenti();
 
 document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
 try{ applyTheme(localStorage.getItem(THEME_KEY) || 'dark'); }catch(e){ applyTheme('dark'); }
+
+// Se già autenticato in questa sessione, salta il login
+try{
+  if(sessionStorage.getItem('registro_auth') === '1') enterApp();
+}catch(e){}
 
 if(SCRIPT_URL){
   setSyncStatus('loading', 'Connessione al database...');
